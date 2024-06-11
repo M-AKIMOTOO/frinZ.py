@@ -741,15 +741,32 @@ for l in range(loop) :
         # noise level, frequency domain
         #
         SNR_freq_rate, noise_level_freq = noise_level(freq_rate_2D_array, fringe_freq_rate_00_amp)
+    
     #
     # time domain
     #
+    delay_win_range_low = -10
+    delay_win_range_high = 10
+    if (-8/length) < rate_range[0] :
+        rate_win_range_low = rate_range[0]
+    else :
+        rate_win_range_low = (-8/length)
+
+    if (8/length) < rate_range[-1] :
+        rate_win_range_high = (8/length)
+    else :
+        rate_win_range_high = rate_range[-1]
+
     if freq_plot != True :
         
         #
         # When the target flux density is nearly detection limit in VLBI
         #
         if delay_win != False and rate_win != False :
+            delay_win_range_low = float(delay_window_low)
+            delay_win_range_high = float(delay_window_high)
+            rate_win_range_low = float(rate_window_low)
+            rate_win_range_high = float(rate_window_high)
             delay_win_range = (float(delay_window_low) <= lag_range)  & (lag_range <= float(delay_window_high))
             rate_win_range  = (float(rate_window_low)  <= rate_range) & (rate_range <= float(rate_window_high))
             delay_rate_fringe_search_area = lag_rate_2D_array[rate_win_range][:,delay_win_range]
@@ -903,21 +920,11 @@ for l in range(loop) :
     # delay-rate search window
     #
     if freq_plot != True and time_plot == True :
-
-        if (-8/PP) < rate_range[0] :
-            rate_min = rate_range[0]
-        else :
-            rate_min = (-8/PP)
-
-        if (8/PP) < rate_range[-1] :
-            rate_max = (8/PP)
-        else :
-            rate_max = rate_range[-1]
         
         # When a RFI is quite large in the fringe search area in the time domain 
-        if cmap_time == True :
-            cmap_blow_up_delay = (-10 <= lag_range)  & (lag_range <= 10)
-            cmap_blow_up_rate  = (rate_min <= rate_range) & (rate_range <= rate_max)
+        #if cmap_time == True :
+        cmap_blow_up_delay = (delay_win_range_low <= lag_range)  & (lag_range <= delay_win_range_high)
+        cmap_blow_up_rate  = (rate_win_range_low <= rate_range) & (rate_range <= rate_win_range_high)
 
         #
         # a directory to save a graph
@@ -954,14 +961,15 @@ for l in range(loop) :
         if cmap_time == True :
             c = ax3.contourf(lag_range[cmap_blow_up_delay], rate_range[cmap_blow_up_rate], np.absolute(lag_rate_2D_array[cmap_blow_up_rate][:,cmap_blow_up_delay]), 100, cmap="rainbow", vmin=0.0)
         else :
-            c = ax3.contourf(lag_range, rate_range, np.absolute(lag_rate_2D_array), 100, cmap="rainbow", vmin=0.0)
+            c = ax3.contourf(lag_range[cmap_blow_up_delay], rate_range[cmap_blow_up_rate], np.absolute(lag_rate_2D_array[cmap_blow_up_rate][:,cmap_blow_up_delay]), 100, cmap="rainbow", vmin=0.0, vmax=np.amax(np.absolute(lag_rate_2D_array)))
+            #c = ax3.contourf(lag_range, rate_range, np.absolute(lag_rate_2D_array), 100, cmap="rainbow", vmin=0.0)
         fig.colorbar(c, format="%.1e")
         #if delay_win != False and rate_win != False :
         #    ax3.plot(lag_range[fringe_lag_rate_00_complex_index2], rate_range[fringe_lag_rate_00_complex_index1], "x", color="white")
         ax3.set_xlabel("Delay [Sample]")
         ax3.set_ylabel("Rate [Hz]")
-        ax3.set_xlim(-10,10)
-        ax3.set_ylim(rate_min, rate_max)
+        ax3.set_xlim(delay_win_range_low, delay_win_range_high)
+        ax3.set_ylim(rate_win_range_low, rate_win_range_high)
         ax3.grid(linestyle=":", color="black")
 
         ax4 = fig.add_subplot(grid[1,1])
