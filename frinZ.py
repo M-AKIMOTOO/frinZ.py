@@ -35,6 +35,7 @@ HISTORY = \
   2024/01/21 update29
   2024/01/24 update30
   2024/03/08 update31
+  2024/07/17 update32
 
   Made by AKIMOTO on 2022/06/10
 ********************** """
@@ -58,6 +59,7 @@ VERSION = \
  version 1.14 (2024/01/21): time domain のフリンジのカラーマップを表示範囲内で色付けする．混信が天体信号に対して十分に強いと，カラーマップ上で天体のフリンジがノイズに埋もれているように見えてしまう．これを回避するために追加した．
  version 2.0 (2024/01/24): cor ファイルを読み込むプログラムを変更した．
  version 3.0 (2024/03/08): FFT/IFFT をマルチプロセスで動くように変更した．
+ version 3.1 (2024/07/17): namedtupe を用いてヘッダーを読み込むようにした．
  +++"""
 
 import os
@@ -67,6 +69,7 @@ import argparse
 import math
 import numpy as np
 import scipy.fft
+from collections import namedtuple
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec
@@ -440,45 +443,49 @@ os.makedirs(header_save_path, exist_ok=True)
 cor_header_file = "%s/%s_header.txt" % (header_save_path, os.path.basename(ifile).split(".")[0])
 cor_header_file_exist = os.path.isfile(cor_header_file)
     
-header1 = np.fromfile(ifile, dtype="<i4", count=8)  # SoftWare Version, Sampling Freq, FFT point, Number of Sector
-header2 = np.fromfile(ifile, dtype="<f8", count=32) # Station 1&2 XYZ position, Sorce Position, Clock Delay
-header3 = np.fromfile(ifile, dtype="<S8", count=17, offset=32) # Station Name, Station Code, Source Name
+header1 = np.fromfile(ifile, dtype="<i4", count=8).tolist()  # SoftWare Version, Sampling Freq, FFT point, Number of Sector
+header2 = np.fromfile(ifile, dtype="<f8", count=32).tolist() # Station 1&2 XYZ position, Sorce Position, Clock Delay
+header3 = np.fromfile(ifile, dtype="<S8", count=17, offset=32).tolist() # Station Name, Station Code, Source Name
+header_field = ["version", "software", "sampling_speed", "fft", "sector", "frequency", "station1_posx", "station1_posy", "station1_posz", "station2_posx", "station2_posy", "station2_posz", "source_ra", "source_dec", "station1_delay", "station1_rate", "station2_delay", "station2_rate", "station1_name", "station1_code", "station2_name", "station2_code", "source_name"]
+header = namedtuple("Header", header_field)
+header = header(header1[1], header1[2], header1[3], header1[6], header1[7], header2[2], header2[6], header2[7], header2[8], header2[12], header2[13], header2[14]
+                , header2[18], header2[19], header2[21], header2[22], header2[27], header2[28], header3[0].decode(), header3[5].decode(), header3[6].decode(), header3[11].decode(), header3[12].decode())
 
 magic_word          = "3ea2f983"
-header_version      = header1[1]
-software_version    = header1[2]
-sampling_speed      = header1[3] / 10**6
+header_version      = header.version
+software_version    = header.software
+sampling_speed      = header.sampling_speed / 10**6
 
 # FFT point, Number of Sector, observing frequency and parametr period
-fft_point           = header1[6]
-number_of_sector    = header1[7]
-observing_frequency = header2[2]/ 10**6
+fft_point           = header.fft
+number_of_sector    = header.sector
+observing_frequency = header.frequency/ 10**6
 PP  = number_of_sector         # parameter period
 BW  = int(sampling_speed // 2) # bandwidth in Yamaguchi-Univ.
 RBW = BW / (fft_point // 2)    # resolution bandwidth
 
 # Station1
-station1_name       = header3[0].decode()
-station1_position_x = header2[6]    # return the tuple
-station1_position_y = header2[7]  # return the tuple
-station1_position_z = header2[8]    # return the tuple
-station1_code       = header3[5].decode()
+station1_name       = header.station1_name
+station1_position_x = header.station1_posx
+station1_position_y = header.station1_posy
+station1_position_z = header.station1_posz
+station1_code       = header.station1_code
 
 # Station2
-station2_name       = header3[6].decode()
-station2_position_x = header2[12]  # return the tuple
-station2_position_y = header2[13]  # return the tuple
-station2_position_z = header2[14]   # return the tuple
-station2_code       = header3[11].decode()
+station2_name       = header.station2_name
+station2_position_x = header.station2_posx
+station2_position_y = header.station2_posy
+station2_position_z = header.station2_posz
+station2_code       = header.station2_code
 
 # Source-Name
-source_name         = header3[12].decode()
-source_position_ra, source_position_dec = Radian2RaDec(header2[18], header2[19])
+source_name         = header.source_name
+source_position_ra, source_position_dec = Radian2RaDec(header.source_ra, header.source_dec)
 
-station1_clock_delay = header2[21]
-station1_clock_rate  = header2[22]
-station2_clock_delay = header2[27]
-station2_clock_rate  = header2[28]
+station1_clock_delay = header.station1_delay
+station1_clock_rate  = header.station1_rate
+station2_clock_delay = header.station2_delay
+station2_clock_rate  = header.station2_rate
 
 #       
 # Header Region Information
