@@ -37,6 +37,7 @@ HISTORY = \
   2024/03/08 update31
   2024/07/17 update32
   2024/11/20 update33
+  2024/11/30 update34
 
   Made by AKIMOTO on 2022/06/10
 ********************** """
@@ -62,6 +63,7 @@ VERSION = \
  version 3.0 (2024/03/08): FFT/IFFT をマルチプロセスで動くように変更した．
  version 3.1 (2024/07/17): namedtupe を用いてヘッダーを読み込むようにした．
  version 4.0 (2024/11/20): Delay と Rate を補正できるようになった（VLBI 技術を参考にした）．
+ version 4.1 (2024/11/30): グラフの描画に RAM が大量に消費されていたので，contour --> imshow に変更した．
  +++"""
 
 import os
@@ -69,14 +71,16 @@ import sys
 import datetime
 import argparse
 import math
+import matplotlib.style
 import numpy as np
 import scipy.fft
 from collections import namedtuple
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec
-import matplotlib.style as mplstyle
-mplstyle.use('fast')
+import matplotlib
+matplotlib.style.use('fast')
+matplotlib.use("Agg")
 from scipy.optimize import curve_fit
 from astropy import units as u
 from astropy.coordinates import SkyCoord
@@ -646,7 +650,7 @@ aspect = int(fft_point/2)/PP
 cross_spectrum_directory = save_directory_path + "/raw_visibility"
 os.makedirs(cross_spectrum_directory, exist_ok=True)
 fig, ax = plt.subplots(figsize=(7.5,6))
-plt.imshow(np.angle(complex_visibility, deg=True), extent=[0, fft_point/2, 0, PP],cmap='jet',aspect=aspect) 
+plt.imshow(np.angle(complex_visibility, deg=True), extent=[0, fft_point/2, PP, 0],cmap='jet',aspect=aspect) 
 plt.colorbar(label="The phase of the cross-spectrum (deg)")
 plt.xlabel("Channel \n(Obs. Freq: %d [MHz], BW: %d [MHz])" % (observing_frequency, BW))
 plt.ylabel("PP")
@@ -655,7 +659,7 @@ plt.savefig("%s/%s_raw_vis_pp_bw_phase.png" % (cross_spectrum_directory, os.path
 plt.cla(); plt.close()
 
 fig, ax = plt.subplots(figsize=(7.5,6))
-plt.imshow(np.abs(complex_visibility), extent=[0, fft_point/2, 0, PP],cmap='jet',aspect=aspect) 
+plt.imshow(np.abs(complex_visibility), extent=[0, fft_point/2, PP, 0],cmap='jet',aspect=aspect) 
 plt.colorbar(label="The amplitude of the cross-spectrum (deg)")
 plt.xlabel("Channel \n(Obs. Freq: %d [MHz], BW: %d [MHz])" % (observing_frequency, BW))
 plt.ylabel("PP")
@@ -664,11 +668,19 @@ plt.savefig("%s/%s_raw_vis_pp_bw_amp.png" % (cross_spectrum_directory, os.path.b
 plt.cla(); plt.close()
 
 
+#
+# corrections of delay and rate
+#
 PP_correct = np.array([np.linspace(1,PP,PP, dtype=int)]).T
 BW_correct = np.linspace(0, int(sampling_speed/2) -1, int(fft_point/2)) *10**6 # MHz
+RF_correct = np.meshgrid(BW_correct, PP_correct.T)[0] + observing_frequency*10**6  # MHz
+complex_visibility *= np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*PP_correct) 
+
+
+
 if delay_correct != 0 or rate_correct != 0 :
     fig, ax = plt.subplots(figsize=(7.5,6))
-    plt.imshow(np.angle(complex_visibility * np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*PP_correct) , deg=True), extent=[0, fft_point/2, 0, PP],cmap='jet',aspect=aspect) 
+    plt.imshow(np.angle(complex_visibility , deg=True), extent=[0, fft_point/2, PP, 0],cmap='jet',aspect=aspect) 
     plt.colorbar(label="The corrected phase of the cross-spectrum (deg)")
     plt.xlabel("Channel \n(Obs. Freq: %d [MHz], BW: %d [MHz])" % (observing_frequency, BW))
     plt.ylabel("PP")
@@ -677,50 +689,13 @@ if delay_correct != 0 or rate_correct != 0 :
     plt.cla(); plt.close()
 
     fig, ax = plt.subplots(figsize=(7.5,6))
-    plt.imshow(np.abs(complex_visibility * np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*PP_correct)), extent=[0, fft_point/2, 0, PP],cmap='jet',aspect=aspect) 
+    plt.imshow(np.abs(complex_visibility), extent=[0, fft_point/2, PP, 0],cmap='jet',aspect=aspect) 
     plt.colorbar(label="The corrected amplitude of the cross-spectrum (deg)")
     plt.xlabel("Channel \n(Obs. Freq: %d [MHz], BW: %d [MHz])" % (observing_frequency, BW))
     plt.ylabel("PP")
     plt.tight_layout()
     plt.savefig("%s/%s_corrected_vis_pp_bw_amp.png" % (cross_spectrum_directory, os.path.basename(ifile).split(".")[0]))
     plt.cla(); plt.close()
-
-
-#exit()
-def fringe_peak_search(vis, delay, rate, bw, pp) :
-    iter = 0
-    std_min = 1
-    d_min = 0
-    r_min = 0
-    dd = 0.5
-    while iter <3 :
-        iter+=1
-        delay_search_range= np.linspace(delay -dd, delay +dd, 21)
-        #rate_search_range= np.linspace(0.045, 0.05, 11)
-        for d in delay_search_range :
-            std1 = np.std(vis * np.exp(-2*np.pi*1j*d/(sampling_speed*10**6)*bw) * np.exp(-2*np.pi*1j*rate*pp))
-            #std1 = vis * np.exp(-2*np.pi*1j*d/(sampling_speed*10**6)*bw) 
-            
-            if std1 < std_min :
-                std_min = std1
-                d_min = d
-                #r_min = r
-            """
-            for r in rate_search_range :
-                std2 = np.std(std1 * np.exp(-2*np.pi*1j*r*pp))
-                if std2 < std_min :
-                    std_min = std2
-                    d_min = d
-                    r_min = r
-            """
-                #print("Delay %f, Rate %f, Std %.5e, Std_Min %.5e" % (d, r, std2, std_min))
-        dd /= 10
-        delay = d_min
-        #rate = r_min
-        #print(dd, delay, rate, delay_search_range)
-    return d_min, r_min
-
-#sdelay_just_peak, _ = fringe_peak_search(complex_visibility, delay_correct, rate_correct, BW_correct, PP_correct)
 
 
 cumulate_len, cumulate_snr, cumulate_noise = [], [], []
@@ -794,7 +769,7 @@ for l in range(loop) :
 
     
     #complex_visibility_split = complex_visibility[length*l:length*(l+1)] * np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct)* np.array([np.exp(-2*np.pi*1j*rate_correct*RF_correct*PP_correct)]).T 
-    complex_visibility_split = complex_visibility[length*l:length*(l+1)] * np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*PP_correct) 
+    complex_visibility_split = complex_visibility[length*l:length*(l+1)] #* np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*PP_correct) 
 
     
     #
@@ -959,6 +934,7 @@ for l in range(loop) :
             fringe_time_freq_plot_path += F"/freq_domain/len{length_label}s"
         os.makedirs(fringe_time_freq_plot_path, exist_ok=True)
 
+
         #
         # make a graph
         #
@@ -993,7 +969,8 @@ for l in range(loop) :
 
         gs4 = GridSpecFromSubplotSpec(nrows=1, ncols=1, subplot_spec=gs[0:2,1])
         ax4 = fig.add_subplot(gs4[0,0])
-        c = ax4.contourf(freq_range, rate_range, np.absolute(freq_rate_2D_array), 100, cmap="rainbow")
+        #c = ax4.contourf(freq_range[j:j+chunk_size2], rate_range[i:i+chunk_size1], test[i:i+chunk_size1, j:j+chunk_size2], 100, cmap="rainbow")
+        c = ax4.imshow(np.absolute(freq_rate_2D_array), extent=[freq_range[0], freq_range[-1], rate_range[-1], rate_range[0]], aspect="auto", cmap="rainbow")
         fig.colorbar(c)
         ax4.set_xlabel("Frequency [MHz]")
         ax4.set_ylabel("Rate [Hz]")
@@ -1071,9 +1048,11 @@ for l in range(loop) :
         ax2.grid(linestyle=":")
 
         if cmap_time == True :
-            c = ax3.contourf(lag_range[cmap_blow_up_delay], rate_range[cmap_blow_up_rate], np.absolute(lag_rate_2D_array[cmap_blow_up_rate][:,cmap_blow_up_delay]), 100, cmap="rainbow", vmin=0.0)
+            #c = ax3.contourf(lag_range[cmap_blow_up_delay], rate_range[cmap_blow_up_rate], np.absolute(lag_rate_2D_array[cmap_blow_up_rate][:,cmap_blow_up_delay]), 100, cmap="rainbow", vmin=0.0)
+            c = ax3.imshow(np.absolute(lag_rate_2D_array[cmap_blow_up_rate][:,cmap_blow_up_delay]), extent=[lag_range[cmap_blow_up_delay][0], lag_range[cmap_blow_up_delay][-1], rate_range[cmap_blow_up_rate][-1], rate_range[cmap_blow_up_rate][0]], interpolation="gaussian", aspect="auto", cmap="rainbow", vmin=0.0)
         else :
-            c = ax3.contourf(lag_range[cmap_blow_up_delay], rate_range[cmap_blow_up_rate], np.absolute(lag_rate_2D_array[cmap_blow_up_rate][:,cmap_blow_up_delay]), 100, cmap="rainbow", vmin=0.0, vmax=np.amax(np.absolute(lag_rate_2D_array)))
+            #c = ax3.contourf(lag_range[cmap_blow_up_delay], rate_range[cmap_blow_up_rate], np.absolute(lag_rate_2D_array[cmap_blow_up_rate][:,cmap_blow_up_delay]), 100, cmap="rainbow", vmin=0.0, vmax=np.amax(np.absolute(lag_rate_2D_array)))
+            c = ax3.imshow(np.absolute(lag_rate_2D_array[cmap_blow_up_rate][:,cmap_blow_up_delay]), extent=[lag_range[cmap_blow_up_delay][0], lag_range[cmap_blow_up_delay][-1], rate_range[cmap_blow_up_rate][-1], rate_range[cmap_blow_up_rate][0]], interpolation="gaussian", aspect="auto", cmap="rainbow", vmin=0.0, vmax=np.amax(np.absolute(lag_rate_2D_array)))
             #c = ax3.contourf(lag_range, rate_range, np.absolute(lag_rate_2D_array), 100, cmap="rainbow", vmin=0.0)
 
         if delay_win == False and rate_win == False :
