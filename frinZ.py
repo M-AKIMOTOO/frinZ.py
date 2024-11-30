@@ -74,18 +74,15 @@ import math
 import matplotlib.style
 import numpy as np
 import scipy.fft
+from scipy.optimize import curve_fit
 from collections import namedtuple
 import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
-from matplotlib.gridspec import GridSpecFromSubplotSpec
+from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 import matplotlib
 matplotlib.style.use('fast')
 matplotlib.use("Agg")
-from scipy.optimize import curve_fit
 from astropy import units as u
-from astropy.coordinates import SkyCoord
-from astropy.coordinates import EarthLocation
-from astropy.coordinates import AltAz
+from astropy.coordinates import SkyCoord, EarthLocation, AltAz
 from astropy.time import Time
 
 
@@ -427,8 +424,8 @@ def time_add_plot(target, x1, y1, xl, yl, s, Xm, xM, save_pass) :
 
 def dynamic_spectrum(x,y,z,xl,yl,zl,xr,yr,path) :
     fig, ax = plt.subplots(1, 1, figsize=(8, 7), tight_layout=True)
-    c = ax.contourf(x, y, np.absolute(z), 100, cmap="rainbow")
-
+    #c = ax.contourf(x, y, np.absolute(z), 100, cmap="rainbow")
+    c = ax.imshow(np.absolute(z), extent=[x[0], x[-1], y[-1], y[0]], aspect="auto", cmap="rainbow")
     fig.colorbar(c, label=zl)
     plt.xlabel(xl)
     plt.ylabel(yl)
@@ -1117,6 +1114,8 @@ for l in range(loop) :
     # Delay-rate Search
     #
     if DDD == True :        
+        
+        from scipy import interpolate
 
         delay_rate_search_3D_lag  = np.array([lag_range]  * lag_rate_2D_array.shape[0])
         delay_rate_search_3D_rate = np.array([rate_range] * lag_rate_2D_array.shape[1]).T
