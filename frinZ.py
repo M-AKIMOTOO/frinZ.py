@@ -461,10 +461,12 @@ cor_header_file_exist = os.path.isfile(cor_header_file)
 header1 = np.fromfile(ifile, dtype="<i4", count=8).tolist()  # SoftWare Version, Sampling Freq, FFT point, Number of Sector
 header2 = np.fromfile(ifile, dtype="<f8", count=32).tolist() # Station 1&2 XYZ position, Sorce Position, Clock Delay
 header3 = np.fromfile(ifile, dtype="<S8", count=17, offset=32).tolist() # Station Name, Station Code, Source Name
-header_field = ["version", "software", "sampling_speed", "fft", "sector", "frequency", "station1_posx", "station1_posy", "station1_posz", "station2_posx", "station2_posy", "station2_posz", "source_ra", "source_dec", "station1_delay", "station1_rate", "station2_delay", "station2_rate", "station1_name", "station1_code", "station2_name", "station2_code", "source_name"]
+header_field = ["version", "software", "sampling_speed", "fft", "sector", "frequency", "station1_posx", "station1_posy", "station1_posz", "station2_posx", "station2_posy", "station2_posz", "source_ra", "source_dec", "station1_delay", "station1_rate", "station1_acel", "station1_jerk", "station1_snap", "station2_delay", "station2_rate", "station2_acel", "station2_jerk", "station2_snap", "station1_name", "station1_code", "station2_name", "station2_code", "source_name"]
 header = namedtuple("Header", header_field)
-header = header(header1[1], header1[2], header1[3], header1[6], header1[7], header2[2], header2[6], header2[7], header2[8], header2[12], header2[13], header2[14]
-                , header2[18], header2[19], header2[21], header2[22], header2[27], header2[28], header3[0].decode(), header3[5].decode(), header3[6].decode(), header3[11].decode(), header3[12].decode())
+header = header(header1[1], header1[2], header1[3], header1[6], header1[7], 
+                header2[2], header2[6], header2[7], header2[8], header2[12], header2[13], header2[14], header2[18], header2[19], 
+                header2[21], header2[22], header2[23], header2[24], header2[25], header2[27], header2[28], header2[29], header2[30], header2[31], 
+                header3[0].decode(), header3[5].decode(), header3[6].decode(), header3[11].decode(), header3[12].decode())
 
 magic_word          = "3ea2f983"
 header_version      = header.version
@@ -499,13 +501,19 @@ source_position_ra, source_position_dec = Radian2RaDec(header.source_ra, header.
 
 station1_clock_delay = header.station1_delay
 station1_clock_rate  = header.station1_rate
+station1_clock_acel  = header.station1_acel
+station1_clock_jerk  = header.station1_jerk
+station1_clock_snap  = header.station1_snap
 station2_clock_delay = header.station2_delay
 station2_clock_rate  = header.station2_rate
+station2_clock_acel  = header.station2_acel
+station2_clock_jerk  = header.station2_jerk
+station2_clock_snap  = header.station2_snap
 
 #       
 # Header Region Information
 #
-if cor_header_file_exist == False or header_ == True :
+if  header_ == True :
     header_region_info = \
     f"""##### Header Region
     Magic Word = {magic_word}
@@ -522,21 +530,27 @@ if cor_header_file_exist == False or header_ == True :
         Name = {station1_name}
         Code = {station1_code}
         Station1 Clock Delay = {station1_clock_delay} s
-        Station1 Clock Rate  = {station1_clock_rate} s
+        Station1 Clock Rate  = {station1_clock_rate} s/s
+        Station1 Clock Acel  = {station1_clock_acel} s/s**2
+        Station1 Clock Jerk  = {station1_clock_jerk} s/s**3
+        Station1 Clock Snap  = {station1_clock_snap} s/s**4
         Pisition (X,Y,Z) = ({station1_position_x},{station1_position_y},{station1_position_z}) m, geocentric coordinate
     
     Station2
         Name = {station2_name}
         Code = {station2_code}
         Station2 Clock Delay = {station2_clock_delay} s
-        Station2 Clock Rate  = {station2_clock_rate} s
+        Station2 Clock Rate  = {station2_clock_rate} s/s
+        Station2 Clock Acel  = {station2_clock_acel} s/s**2
+        Station2 Clock Jerk  = {station2_clock_jerk} s/s**3
+        Station2 Clock Snap  = {station2_clock_snap} s/s**4
         Pisition (X,Y,Z) = ({station2_position_x},{station2_position_y},{station2_position_z}) m, geocentric coordinate
 
     Source
         Name = {source_name}
         Position (RA, Decl) = ({source_position_ra:.5f},{source_position_dec:.5f}) deg, J2000
     """ 
-    cor_header_save = open(cor_header_file, "w"); cor_header_save.write(header_region_info); cor_header_save.close(); print(header_region_info)
+    cor_header_save = open(cor_header_file, "w"); cor_header_save.write(header_region_info); cor_header_save.close(); print("Header Show\n", header_region_info); exit()
 
 
 #
