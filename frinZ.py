@@ -267,7 +267,7 @@ help_rate_win  = "--delay-window の rate 版"
 help_del_corr  = "Delay (sample 単位) を補正する．fringe の出力もしくは frinZ.py を複数回実行して特定した値をそのまま引数にとる．"
 help_rate_corr = "Rate (Hz 単位) を補正する．fringe の出力もしくは frinZ.py を複数回実行して特定した値をそのまま引数にとる．"
 help_acel_corr = "test"
-help_delay_rate_json = "JSON フォーマットで res-delay と res-rate をまとめたファイルを指定する．JSON ファイルの中身は  \"cor-file path\": [res-delay,res-rate] とする．"
+help_delay_rate_acel_json = "JSON フォーマットで res-delay と res-rate をまとめたファイルを指定する．JSON ファイルの中身は  \"cor-file path\": [res-delay,res-rate] とする．"
 help_serach    = "--peak-search Delay Rate．Delay は sample 単位で Rate は Hz 単位．その周囲でフリンジのピークを探査して，フリンジのピークの詳細な Delay と Rate を決定する．"
 help_cmap_del  = "time domain のフリンジのカラーマップを表示範囲内で色付けする．混信が天体信号に対して十分に強いと，カラーマップ上で天体のフリンジがノイズに埋もれているように見えてしまう．これを回避するために追加した．"
 help_summarize = "すべての出力ファイルをディレクトリにまとめる．"
@@ -289,7 +289,7 @@ parser.add_argument("--rate-window"     , default=False, nargs=2 , dest="rate_wi
 parser.add_argument("--delay-correct"   , default=0.0, type=float, dest="del_corr", help=help_del_corr)
 parser.add_argument("--rate-correct"    , default=0.0, type=float, dest="rate_corr", help=help_rate_corr)
 parser.add_argument("--acel-correct"    , default=0.0, type=float, dest="acel_corr", help=help_acel_corr)
-parser.add_argument("--delay-rate-json" , default=False, dest="delay_rate_json", help=help_delay_rate_json)
+parser.add_argument("--delay-rate-acel-json" , default=False, dest="delay_rate_acel_json", help=help_delay_rate_acel_json)
 parser.add_argument("--peak-search"     , default=False, nargs=2   , dest="peak_search", help=help_serach)
 parser.add_argument("--cumulate"        , default=0    , type=int              , help=help_cumulate)
 parser.add_argument("--cpu"             , default=1    , type=int              , help=help_cpu     )
@@ -322,7 +322,7 @@ rate_win  = args.rate_win
 delay_correct = args.del_corr
 rate_correct = args.rate_corr
 acel_correct = args.acel_corr
-delay_rate_json = args.delay_rate_json
+delay_rate_acel_json = args.delay_rate_acel_json
 peak_search = args.peak_search
 cmap_time = args.cmap_time
 DDD       = args.ddd   # 2D-graph
@@ -446,6 +446,15 @@ def dynamic_spectrum(x,y,z,xl,yl,zl,xr,yr,path) :
     plt.savefig(path, dpi=300)
     plt.clf(); plt.close()
 
+def digit_cal(num) :
+    if type(num) == int :
+        digit = int(len(str(num)))
+    elif type(num) == float :
+        pass
+    else :
+        print("Please specify an inter or a float number.")
+        exit()
+    return digit
 
 # label
 label = os.path.splitext(ifile)[0].split("_")[-1]
@@ -582,6 +591,7 @@ if skip < 0 or skip >= PP:
     print("You specify the skip time, %.0f" % skip)
     exit(1)
 
+
 # loop
 if loop == False or (PP-skip)//length <= 0  :
     loop = 1
@@ -652,18 +662,29 @@ else :
 cor_file = open(ifile, "rb")
 complex_visibility = np.frombuffer(cor_file.read(), dtype="<f4", offset=256)
 complex_visibility = complex_visibility.reshape(PP, int(len(complex_visibility)/PP))
-effective_integration_length = np.real(complex_visibility[:,28]).tolist()
+effective_integration_length = complex_visibility[:,28][0]
 complex_visibility = np.delete(complex_visibility, np.linspace(0,33,34, dtype=int), 1)
 complex_visibility = np.insert(complex_visibility,0,0,axis=1)
 complex_visibility = np.insert(complex_visibility,1,0,axis=1)
 complex_visibility = complex_visibility.reshape(int(PP*(fft_point)/2), 2)
 complex_visibility = (complex_visibility[:,0] + complex_visibility[:,1] *1j).reshape(PP, int(fft_point/2))
+complex_visibility = complex_visibility[skip:]
 cor_file.close()
 
+
+digit = 0
+if np.round(effective_integration_length, 0) < 1.0 :
+    while effective_integration_length < 1.0 :
+        effective_integration_length *= 10
+        digit += 1
+    effective_integration_length = 1/10**(digit -1)
+else :
+    effective_integration_length = np.round(effective_integration_length, 0)
 
 cor_file = open(ifile, "rb")
 obs_scan_time = np.frombuffer(cor_file.read(), dtype="<i4", offset=256)
 obs_scan_time = obs_scan_time.reshape(PP, int(len(obs_scan_time)/PP))[:,0].tolist()
+obs_scan_time = obs_scan_time[skip:]
 cor_file.close()
 
 
@@ -673,7 +694,7 @@ os.makedirs(cross_spectrum_directory, exist_ok=True)
 fig, ax = plt.subplots(figsize=(7.5,6))
 plt.imshow(np.angle(complex_visibility, deg=True), extent=[0, fft_point/2, PP, 0],cmap='jet',aspect=aspect) 
 plt.colorbar(label="The phase of the cross-spectrum (deg)")
-plt.xlabel("Channel \n(Obs. Freq: %d [MHz], BW: %d [MHz])" % (observing_frequency, BW))
+plt.xlabel("Channel \n(Obs. Freq: %d MHz, BW: %d MHz)" % (observing_frequency, BW))
 plt.ylabel("PP")
 plt.tight_layout()
 plt.savefig("%s/%s_raw_vis_pp_bw_phase.png" % (cross_spectrum_directory, os.path.basename(ifile).split(".")[0]))
@@ -681,8 +702,8 @@ plt.cla(); plt.close()
 
 fig, ax = plt.subplots(figsize=(7.5,6))
 plt.imshow(np.abs(complex_visibility), extent=[0, fft_point/2, PP, 0],cmap='jet',aspect=aspect) 
-plt.colorbar(label="The amplitude of the cross-spectrum (deg)")
-plt.xlabel("Channel \n(Obs. Freq: %d [MHz], BW: %d [MHz])" % (observing_frequency, BW))
+plt.colorbar(label="The amplitude of the cross-spectrum")
+plt.xlabel("Channel \n(Obs. Freq: %d MHz, BW: %d MHz)" % (observing_frequency, BW))
 plt.ylabel("PP")
 plt.tight_layout()
 plt.savefig("%s/%s_raw_vis_pp_bw_amp.png" % (cross_spectrum_directory, os.path.basename(ifile).split(".")[0]))
@@ -692,18 +713,18 @@ plt.cla(); plt.close()
 #
 # corrections of delay and rate
 #
-if delay_correct != 0.0 and rate_correct != 0.0 and delay_rate_json != False :
+if delay_correct != 0.0 and rate_correct != 0.0 and delay_rate_acel_json != False :
     print("Please select --delay-corr and --rate-corr or --delay-rate-json to correct res-delay and res-rate.")
     exit()
-if delay_rate_json != False :
-    json_load = json.load(open(delay_rate_json, "r"))
+if delay_rate_acel_json != False :
+    json_load = json.load(open(delay_rate_acel_json, "r"))
     try :
         delay_correct, rate_correct, acel_correct = json_load[ifile]
     except KeyError :
         print("# Not found res-delay and res-rate of %s so they are forced to be 0.0." % ifile)
         print("# Plese use --delay-corr, --rate-corr, and --acel-corr options!")
         delay_correct, rate_correct, acel_correct = 0.0, 0.0, 0.0 
-PP_correct = np.array([np.linspace(1,PP,PP, dtype=int)]).T
+PP_correct = np.array([np.linspace(skip+1,PP,PP-skip, dtype=int)]).T
 BW_correct = np.linspace(0, int(sampling_speed/2) -1, int(fft_point/2)) *10**6 # MHz
 RF_correct = np.meshgrid(BW_correct, PP_correct.T)[0] + observing_frequency*10**6  # MHz
 complex_visibility *= np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*PP_correct) * (1/2 * np.exp(-2*np.pi*1j*acel_correct*PP_correct**2))
@@ -777,6 +798,7 @@ for l in range(loop) :
     epoch2 = epoch0.strftime("%Y%j%H%M%S")
     epoch3 = epoch0.strftime("%Y-%m-%d %H:%M:%S")
 
+
     mjd = "%.5f" % Time("T".join(epoch3.split()), format="isot", scale="utc").mjd
 
     # azel 
@@ -795,8 +817,8 @@ for l in range(loop) :
     #
     # for caribrating a delay and rate 
     #
-    PP_correct = np.array([np.linspace(length*l+1,length*(l+1), length, dtype=int)]).T
-    BW_correct = np.linspace(0, int(sampling_speed/2) -1, int(fft_point/2)) *10**6 # MHz
+    #PP_correct = np.array([np.linspace(length*l+1,length*(l+1), length, dtype=int)]).T
+    #BW_correct = np.linspace(0, int(sampling_speed/2) -1, int(fft_point/2)) *10**6 # MHz
     #RF_correct = np.meshgrid(BW_correct, PP_correct)[0] + observing_frequency*10**6  # MHz
 
     
@@ -835,9 +857,9 @@ for l in range(loop) :
     # the cross-spectrum, the fringe phase, the rate in the frequency domain, the time-lag, and the rate in the time domain.
     #
     integ_range = np.round(np.linspace(1,PP,PP), 5)                                             # integration time range
-    rate_range  = np.fft.fftshift(np.fft.fftfreq(integ_fft, d=effective_integration_length[length*l:length*(l+1)][0]))    # rate range, the sampling frequency is 1 second if the outout value in xml-file is 1 Hz and the parameter if length is 1.
-    freq_range  = np.round(np.linspace(0,511,int(512/RBW)),3)                                   # cross spectrum range
-    lag_range   = np.round(np.linspace(-fft_point//2+1,fft_point//2,fft_point), 5)              # time lag range
+    rate_range  = np.fft.fftshift(np.fft.fftfreq(integ_fft, d=effective_integration_length))    # rate range, the sampling frequency is 1 second if the outout value in xml-file is 1 Hz and the parameter if length is 1.
+    freq_range  = np.round(np.linspace(0,511,int(512/RBW)),digit_cal(int(fft_point/2)))                                   # cross spectrum range
+    lag_range   = np.linspace(-fft_point//2+1,fft_point//2,fft_point, dtype=int)        # time lag range
 
 
     #
@@ -920,8 +942,8 @@ for l in range(loop) :
             output_freq += F"#year/doy hh:mm:ss                        [s]       [%]                [deg]       [MHz]       1-sigma [%]   az[deg]  el[deg]  height[m]   az[deg]   el[deg]  height[m]          \n"
             output_freq += F"#******************************************************************************************************************************************************************************************"
             print(output_freq); output_freq += "\n"
-        output1 = "%s    %s    %s     %.2f     %f %7.1f  %+8.3f    %8.3f      %f       %.3f  %.3f  %.3f       %.3f  %.3f  %.3f   %s" % \
-            (epoch1, label, source_name, length, fringe_freq_rate_00_amp*100, SNR_freq_rate, fringe_freq_rate_00_phase2, fringe_freq_rate_00_freq, noise_level_freq*100, station1_azel[0], station1_azel[1], station1_azel[2], station2_azel[0], station2_azel[1], station2_azel[2], mjd)
+        output1 = "%s    %s    %s     %.5f     %f %7.1f  %+8.3f    %8.3f      %f       %.3f  %.3f  %.3f       %.3f  %.3f  %.3f   %s" % \
+            (epoch1, label, source_name, length*effective_integration_length, fringe_freq_rate_00_amp*100, SNR_freq_rate, fringe_freq_rate_00_phase2, fringe_freq_rate_00_freq, noise_level_freq*100, station1_azel[0], station1_azel[1], station1_azel[2], station2_azel[0], station2_azel[1], station2_azel[2], mjd)
         output_freq += "%s\n" % output1; print(output1)
 
     if freq_plot != True : # fringe
@@ -932,8 +954,8 @@ for l in range(loop) :
             output_time += F"#year/doy hh:mm:ss                          [s]        [%]                [deg]     1-sigma[%]       [sample]        [Hz]      az[deg]  el[deg]  height[m]   az[deg]   el[deg]  height[m]          \n"
             output_time += F"#****************************************************************************************************************************************************************************************************"
             print(output_time); output_time += "\n"
-        output2 = "%s    %s   %s     %.2f     %.6f  %7.1f  %+8.3f     %f        %+.2f      %+f       %.3f  %.3f  %.3f      %.3f  %.3f  %.3f   %s" % \
-            (epoch1, label, source_name, length, fringe_lag_rate_00_amp*100, SNR_time_lag, fringe_lag_rate_00_phase, noise_level_lag*100, yi_time_rate, yi_time_lag, station1_azel[0], station1_azel[1], station1_azel[2], station2_azel[0], station2_azel[1], station2_azel[2], mjd)
+        output2 = "%s    %s   %s     %.5f     %.6f  %7.1f  %+8.3f     %f        %+.2f      %+f       %.3f  %.3f  %.3f      %.3f  %.3f  %.3f   %s" % \
+            (epoch1, label, source_name, length*effective_integration_length, fringe_lag_rate_00_amp*100, SNR_time_lag, fringe_lag_rate_00_phase, noise_level_lag*100, yi_time_rate, yi_time_lag, station1_azel[0], station1_azel[1], station1_azel[2], station2_azel[0], station2_azel[1], station2_azel[2], mjd)
         output_time += "%s\n" % output2; print(output2)
 
         if cumulate != 0 and add_plot != True :
