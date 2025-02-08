@@ -2,7 +2,7 @@
 # AKIMOTO
 HISTORY = \
 """ **********************
- The history
+ History
   2022/06/10
   2022/06/11 update1
   2022/06/12 update2
@@ -44,7 +44,7 @@ HISTORY = \
 ********************** """
 
 VERSION = \
-"""+++ version +++
+"""+++ Version +++
  version 1.0 (2022/07/12): とりあえず完成した（S/N の評価はまだ）．
  version 1.1 (2022/07/13): numba (jit) を使用しなくてもいいようにした．
  version 1.2 (2022/07/15): 積分時間を累積することにより，積分時間 vs S/N のグラフを出力できるようにした．
@@ -66,7 +66,6 @@ VERSION = \
  version 4.0 (2024/11/20): Delay と Rate を補正できるようになった（VLBI 技術を参考にした）．
  version 4.1 (2024/11/30): グラフの描画に RAM が大量に消費されていたので，contour --> imshow に変更した．
  version 4.2 (2024/12/29): JSON フォーマットで res-delay, res-rate, res-acel を指定できるようにした．--delay-corr, --rate-corr, and --acel-corr を使わなくてもよい．
- 
  +++"""
 
 import os
