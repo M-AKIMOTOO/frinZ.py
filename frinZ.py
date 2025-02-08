@@ -1053,7 +1053,7 @@ for l in range(loop) :
         plt.clf(); plt.close()
 
         if plane == True :
-            dynamic_spectrum(freq_range, rate_range, np.absolute(freq_rate_2D_array.T), "Frequency [MHz]", "Rate [Hz]", "cross-spectrum [%]", \
+            dynamic_spectrum(freq_range, rate_range, np.absolute(freq_rate_2D_array), "Frequency [MHz]", "Rate [Hz]", "cross-spectrum [%]", \
                              [min(freq_range), max(freq_range)], [min(rate_range), max(rate_range)], F"{plane_path}/{save_file_name}_freq_rate_plane_expansion.png")
 
 
