@@ -497,7 +497,7 @@ fft_point           = header.fft
 number_of_sector    = header.sector
 observing_frequency = header.frequency/ 10**6
 PP  = number_of_sector         # parameter period
-BW  = int(sampling_speed // 2) # bandwidth in Yamaguchi-Univ.
+BW  = int(sampling_speed // 2) # 
 RBW = BW / (fft_point // 2)    # resolution bandwidth
 
 # Station1
@@ -858,7 +858,7 @@ for l in range(loop) :
     #
     integ_range = np.round(np.linspace(1,PP,PP), 5)                                             # integration time range
     rate_range  = np.fft.fftshift(np.fft.fftfreq(integ_fft, d=effective_integration_length))    # rate range, the sampling frequency is 1 second if the outout value in xml-file is 1 Hz and the parameter if length is 1.
-    freq_range  = np.round(np.linspace(0,511,int(512/RBW)),digit_cal(int(fft_point/2)))                                   # cross spectrum range
+    freq_range  = np.round(np.linspace(0,BW,fft_point//2),digit_cal(int(fft_point/2)))                                   # cross spectrum range
     lag_range   = np.linspace(-fft_point//2+1,fft_point//2,fft_point, dtype=int)        # time lag range
 
 
@@ -1003,8 +1003,8 @@ for l in range(loop) :
         ax2.set_xlabel("Frequency [MHz]")
         ax1.set_ylabel("Phase")
         ax2.set_ylabel("Amplitude")
-        ax1.set_xlim([0,512])
-        ax2.set_xlim([0,512])
+        ax1.set_xlim([0,BW])
+        ax2.set_xlim([0,BW])
         ax1.set_ylim([-180,180])
         ax2.set_ylim(ymin=0)
         ax1.xaxis.set_ticklabels([])
@@ -1028,7 +1028,7 @@ for l in range(loop) :
         fig.colorbar(c)
         ax4.set_xlabel("Frequency [MHz]")
         ax4.set_ylabel("Rate [Hz]")
-        ax4.set_xlim([0,512])
+        ax4.set_xlim([0,BW])
         ax4.set_ylim([min(rate_range), max(rate_range)])
         ax4.grid(linestyle=":", color="black")
 
