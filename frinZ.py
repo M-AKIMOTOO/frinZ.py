@@ -39,6 +39,7 @@ HISTORY = \
   2024/11/20 update33
   2024/11/30 update34
   2024/12/29 update35
+  2025/05/10 update36
   
   Made by AKIMOTO on 2022/06/10
 ********************** """
@@ -531,44 +532,44 @@ station2_clock_snap  = header.station2_snap
 #       
 # Header Region Information
 #
-if  header_ == True :
-    header_region_info = \
-    f"""##### Header Region
-    Magic Word = {magic_word}
-    Sofrware Vesion = {software_version:.0f}
-    Header Version = {header_version:.0f}
-    Sampling frequency = {sampling_speed:.0f} MHz
-    Observing Frequency = {observing_frequency:.0f} MHz
-    FFT Point = {fft_point:.0f}
-    PP (parameter period) = {number_of_sector:.0f}
-    BandWidth = {BW:.0f} MHz
-    Resolution BandWidth = {RBW:.5f} MHz
+header_region_info = \
+f"""##### Header Region
+Magic Word = {magic_word}
+Sofrware Vesion = {software_version:.0f}
+Header Version = {header_version:.0f}
+Sampling frequency = {sampling_speed:.0f} MHz
+Observing Frequency = {observing_frequency:.0f} MHz
+FFT Point = {fft_point:.0f}
+PP (parameter period) = {number_of_sector:.0f}
+BandWidth = {BW:.0f} MHz
+Resolution BandWidth = {RBW:.5f} MHz
 
-    Station1
-        Name = {station1_name}
-        Code = {station1_code}
-        Station1 Clock Delay = {station1_clock_delay} s
-        Station1 Clock Rate  = {station1_clock_rate} s/s
-        Station1 Clock Acel  = {station1_clock_acel} s/s**2
-        Station1 Clock Jerk  = {station1_clock_jerk} s/s**3
-        Station1 Clock Snap  = {station1_clock_snap} s/s**4
-        Pisition (X,Y,Z) = ({station1_position_x},{station1_position_y},{station1_position_z}) m, geocentric coordinate
-    
-    Station2
-        Name = {station2_name}
-        Code = {station2_code}
-        Station2 Clock Delay = {station2_clock_delay} s
-        Station2 Clock Rate  = {station2_clock_rate} s/s
-        Station2 Clock Acel  = {station2_clock_acel} s/s**2
-        Station2 Clock Jerk  = {station2_clock_jerk} s/s**3
-        Station2 Clock Snap  = {station2_clock_snap} s/s**4
-        Pisition (X,Y,Z) = ({station2_position_x},{station2_position_y},{station2_position_z}) m, geocentric coordinate
+Station1
+    Name = {station1_name}
+    Code = {station1_code}
+    Station1 Clock Delay = {station1_clock_delay} s
+    Station1 Clock Rate  = {station1_clock_rate} s/s
+    Station1 Clock Acel  = {station1_clock_acel} s/s**2
+    Station1 Clock Jerk  = {station1_clock_jerk} s/s**3
+    Station1 Clock Snap  = {station1_clock_snap} s/s**4
+    Pisition (X,Y,Z) = ({station1_position_x},{station1_position_y},{station1_position_z}) m, geocentric coordinate
 
-    Source
-        Name = {source_name}
-        Position (RA, Decl) = ({source_position_ra:.5f},{source_position_dec:.5f}) deg, J2000
-    """ 
-    cor_header_save = open(cor_header_file, "w"); cor_header_save.write(header_region_info); cor_header_save.close(); print("Header Show\n", header_region_info); exit()
+Station2
+    Name = {station2_name}
+    Code = {station2_code}
+    Station2 Clock Delay = {station2_clock_delay} s
+    Station2 Clock Rate  = {station2_clock_rate} s/s
+    Station2 Clock Acel  = {station2_clock_acel} s/s**2
+    Station2 Clock Jerk  = {station2_clock_jerk} s/s**3
+    Station2 Clock Snap  = {station2_clock_snap} s/s**4
+    Pisition (X,Y,Z) = ({station2_position_x},{station2_position_y},{station2_position_z}) m, geocentric coordinate
+
+Source
+    Name = {source_name}
+    Position (RA, Decl) = ({source_position_ra:.5f},{source_position_dec:.5f}) deg, J2000
+""" 
+cor_header_save = open(cor_header_file, "w"); cor_header_save.write(header_region_info); cor_header_save.close()
+if  header_ : print("Header Show\n", header_region_info)
 
 
 #
@@ -618,9 +619,9 @@ if plane == True and time_plot == False :
 
 # frequency
 if   6600 <= observing_frequency <= 7112 :
-    observing_band = "c-band"
+    observing_band = "c"
 elif 8192 <= observing_frequency <= 8704 :
-    observing_band = "x-band"
+    observing_band = "x"
 else :
     observing_band = ""
 
@@ -778,6 +779,9 @@ for l in range(loop) :
     if plane == True :
         plane_path = save_directory_path + "/search_plane_expansion"
         os.makedirs(plane_path, exist_ok=True)
+    if rfi != False :
+        rfi_history = save_directory_path + "/rfi_history"
+        os.makedirs(rfi_history, exist_ok=True)
 
          
     save_file_name = ""
@@ -840,7 +844,10 @@ for l in range(loop) :
                 if r >= int(fft_point/2) :
                     continue
                 complex_visibility_split[:,r] = 0+0j
-
+        
+        rfi_history_txt = open(f"{rfi_history}/{save_file_name}_history.txt", "a")
+        rfi_history_txt.write(f"cor: {ifile}, rfi: {rfi}, length: {length}, delay-window: {delay_win}, rate-win: {rate_win}, delay-corr: {delay_correct}, rate-corr: {rate_correct}\n")
+        rfi_history_txt.close()
 
     # Numpy version
     #freq_rate_2D_array = np.fft.fftshift(np.fft.fft(complex_visibility_split, axis=0, n=integ_fft), axes=0) * fft_point / length
@@ -1239,8 +1246,8 @@ if cumulate != 0 and add_plot != True :
         return y
     
     # length vs SNR
-    param, cov = curve_fit(power_law_equation, cumulate_len, cumulate_snr)
-    x_data  = np.linspace(cumulate_len[0], cumulate_len[-1], 10000)
+    param, conv = curve_fit(power_law_equation, cumulate_len, cumulate_snr)
+    x_data  = np.linspace(cumulate_len[0], cumulate_len[-1], int((cumulate_len[-1] - cumulate_len[0])/10))
     y_data1 = power_law_equation(x_data, *param)
     y_data2 = power_law_equation(x_data,  param[0], 0.5)
 
@@ -1267,8 +1274,8 @@ if cumulate != 0 and add_plot != True :
 
 
     # Noise-level
-    param, cov = curve_fit(power_law_equation, cumulate_len, cumulate_noise)
-    x_data = np.linspace(cumulate_len[0], cumulate_len[-1], 10000)
+    param, conv = curve_fit(power_law_equation, cumulate_len, cumulate_noise)
+    x_data = np.linspace(cumulate_len[0], cumulate_len[-1], int((cumulate_len[-1] - cumulate_len[0])/10))
     y_data = power_law_equation(x_data, *param)
     
     fig = plt.figure(dpi=100, figsize=(10.24,5.12))
