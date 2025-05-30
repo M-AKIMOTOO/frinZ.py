@@ -727,7 +727,7 @@ if delay_rate_acel_json != False :
 PP_correct = np.array([np.linspace(skip+1,PP,PP-skip, dtype=int)]).T
 BW_correct = np.linspace(0, int(sampling_speed/2) -1, int(fft_point/2)) *10**6 # MHz
 RF_correct = np.meshgrid(BW_correct, PP_correct.T)[0] + observing_frequency*10**6  # MHz
-complex_visibility *= np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*PP_correct) * (1/2 * np.exp(-2*np.pi*1j*acel_correct*PP_correct**2))
+complex_visibility *= np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*(PP_correct*effective_integration_length)) * (1/2 * np.exp(-2*np.pi*1j*acel_correct*(PP_correct*effective_integration_length)**2))
 
 
 
@@ -862,7 +862,7 @@ for l in range(loop) :
     #
     # the cross-spectrum, the fringe phase, the rate in the frequency domain, the time-lag, and the rate in the time domain.
     #
-    integ_range = np.round(np.linspace(1,PP,PP), 5)                                             # integration time range
+    integ_range = np.round(np.linspace(1,int(PP*effective_integration_length),int(PP*effective_integration_length)), 5)                                             # integration time range
     rate_range  = np.fft.fftshift(np.fft.fftfreq(integ_fft, d=effective_integration_length))    # rate range, the sampling frequency is 1 second if the outout value in xml-file is 1 Hz and the parameter if length is 1.
     freq_range  = np.round(np.linspace(0,BW,fft_point//2),digit_cal(int(fft_point/2)))                                   # cross spectrum range
     lag_range   = np.linspace(-fft_point//2+1,fft_point//2,fft_point, dtype=int)        # time lag range
@@ -898,10 +898,10 @@ for l in range(loop) :
     #
     delay_win_range_low = -30
     delay_win_range_high = 30
-    if (-8/length) < rate_range[0] : rate_win_range_low = rate_range[0]
-    else :                           rate_win_range_low = (-8/length)
-    if (8/length) < rate_range[-1] : rate_win_range_high = (8/length)
-    else :                           rate_win_range_high = rate_range[-1]
+    if (-8/length) < rate_range[0] : rate_win_range_low = rate_range[0]*effective_integration_length
+    else :                           rate_win_range_low = -8/(length*effective_integration_length)
+    if (8/length) < rate_range[-1] : rate_win_range_high = 8/(length*effective_integration_length)
+    else :                           rate_win_range_high = rate_range[-1]*effective_integration_length
 
     if freq_plot != True :
         
