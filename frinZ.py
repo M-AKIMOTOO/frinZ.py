@@ -1151,19 +1151,20 @@ for l in range(loop) :
         ax3.grid(linestyle=":", color="black")
 
         ax4 = fig.add_subplot(grid[1,1])
-        #ax4.axis('tight')
+ 
+        ax4.text(-0.25,1.00,"Epoch (UTC)", fontsize=13.5)                          ; ax4.text(1.05,1.00, "%s" % epoch1, fontsize=13.5, ha='right')
+        ax4.text(-0.25,0.90,"Station 1 & 2", fontsize=13.5)                  ; ax4.text(1.05,0.90, "%s" % (station1_name + " & " + station2_name), fontsize=13.5, ha='right')
+        ax4.text(-0.25,0.80,"Source", fontsize=13.5)                         ; ax4.text(1.05,0.80, "%s" % source_name, fontsize=13.5, ha='right')
+        ax4.text(-0.25,0.70,"Length [s]", fontsize=13.5)                     ; ax4.text(1.05,0.70, "%.3f" % length, fontsize=13.5, ha='right')
+        ax4.text(-0.25,0.60,"Frequency [MHz]", fontsize=13.5)                ; ax4.text(1.05,0.60, "%4.3f" % observing_frequency, fontsize=13.5, ha='right')
+        ax4.text(-0.25,0.50,"Peak Amp [%]", fontsize=13.5)                   ; ax4.text(1.05,0.50, "%.6e" % (fringe_lag_rate_00_amp * 100), fontsize=13.5, ha='right')
+        ax4.text(-0.25,0.40,"Peak Phs [deg]", fontsize=13.5)                 ; ax4.text(1.05,0.40, "%+.5f" % fringe_lag_rate_00_phase, fontsize=13.5, ha='right')
+        ax4.text(-0.25,0.30,"SNR (1 \u03C3 [%])", fontsize=13.5)             ; ax4.text(1.05,0.30, "%.3f (%.5e)" % (SNR_time_lag, noise_level_lag*100), fontsize=13.5, ha='right')
+        ax4.text(-0.25,0.20,"Delay (residual) [sps]", fontsize=13.5)         ; ax4.text(1.05,0.20, f"{yi_time_rate:+.6f}", fontsize=13.5, ha='right')
+        ax4.text(-0.25,0.10,"Delay (corrected) [sps]", fontsize=13.5)        ; ax4.text(1.05,0.10, f"{delay_correct:+.6f}", fontsize=13.5, ha='right')
+        ax4.text(-0.25,0.00,"Rate  (residual) [mHz]", fontsize=13.5)         ; ax4.text(1.05,0.00, f"{yi_time_lag*1000:+.6f}", fontsize=13.5, ha='right')
+        ax4.text(-0.25,-0.1,"Rate  (corrected) [mHz]", fontsize=13.5)        ; ax4.text(1.05,-0.1, f"{rate_correct*1000:+.6f}", fontsize=13.5, ha='right')
         ax4.axis('off')
-        data=[["Epoch", epoch1], ["Station 1 & 2", "%s, %s" % (station1_name, station2_name)], \
-              ["Source", source_name], ["Length [s]", "%.3f" % length], ["Frequency [MHz]", "%.3f" % observing_frequency], \
-              ["Peak Amp [%]", "%.6f" % (fringe_lag_rate_00_amp * 100)], ["Peak Phs [deg]", "%.5f" % fringe_lag_rate_00_phase], \
-              ["SNR (1 \u03C3 [%])", "%.3f (%.5e)" % (SNR_time_lag, noise_level_lag*100)], ["Delay (residual) [sample]", "%+.8f" % yi_time_rate], \
-              ["Delay (corrected) [sample]", "%+.8f" % delay_correct], ["Rate (residual) [mHz]", "%+.8f" % (yi_time_lag*1000)], ["Rate (corrected) [mHz]", "%+.8f" % (rate_correct*1000)]]
-        table_ax4 = ax4.table(cellText=data, loc="center", cellLoc="left", colWidths=[0.75,0.75])
-        table_ax4.set_fontsize(30)
-        [table_ax4[i, 1].get_text().set_ha('right') for i in range(len(data))]
-        for pos, cell in table_ax4.get_celld().items():
-            cell.set_height(1.0/(len(data)*0.9))
-            cell.set_linestyle('')
 
         plt.tight_layout()
         fig.savefig(F"{fringe_time_freq_plot_path}/{save_file_name}_delay_rate_search.png")
