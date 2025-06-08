@@ -103,7 +103,7 @@ plt.rcParams["xtick.minor.size"]    = 3
 plt.rcParams["ytick.minor.size"]    = 3          
 plt.rcParams["axes.grid"]           = False
 plt.rcParams["grid.color"]          = "lightgray"
-plt.rcParams["axes.labelsize"]      = 15
+plt.rcParams["axes.labelsize"]      = 12
 plt.rcParams["font.size"]           = 12
 
 
@@ -910,8 +910,8 @@ for l in range(loop) :
     delay_win_range_low = -30
     delay_win_range_high = 30
     if (-8/length) < rate_range[0] : rate_win_range_low = rate_range[0]*effective_integration_length
-    else :                           rate_win_range_low = -8/(length*effective_integration_length)
-    if (8/length) < rate_range[-1] : rate_win_range_high = 8/(length*effective_integration_length)
+    else :                           rate_win_range_low = -4/(length*effective_integration_length)
+    if (8/length) < rate_range[-1] : rate_win_range_high = 4/(length*effective_integration_length)
     else :                           rate_win_range_high = rate_range[-1]*effective_integration_length
 
     if freq_plot != True :
@@ -1151,17 +1151,18 @@ for l in range(loop) :
         ax3.grid(linestyle=":", color="black")
 
         ax4 = fig.add_subplot(grid[1,1])
-        ax4.axis('tight')
+        #ax4.axis('tight')
         ax4.axis('off')
-        data=[["Epoch", epoch1], ["Station-1", station1_name], ["Station-2", station2_name], \
-              ["Source", source_name], ["Length [s]", "%.6f" % length], ["Frequency [MHz]", "%.6f" % observing_frequency], \
-              ["Peak Amp [%]", "%.6f" % (fringe_lag_rate_00_amp * 100)], ["Peak Phs [deg]", "%.6f" % fringe_lag_rate_00_phase], \
-              ["SNR", "%.6f" % SNR_time_lag], ["1-sigma [%]", "%.8f" % (noise_level_lag*100)], ["delay [sample]", "%+.1e" % yi_time_rate], ["rate [mHz]", "%+.3f" % (yi_time_lag*1000)]]
-        table_ax4 = ax4.table(cellText=data, loc="center", cellLoc="left", colWidths=[0.65,0.65])
+        data=[["Epoch", epoch1], ["Station 1 & 2", "%s, %s" % (station1_name, station2_name)], \
+              ["Source", source_name], ["Length [s]", "%.3f" % length], ["Frequency [MHz]", "%.3f" % observing_frequency], \
+              ["Peak Amp [%]", "%.6f" % (fringe_lag_rate_00_amp * 100)], ["Peak Phs [deg]", "%.5f" % fringe_lag_rate_00_phase], \
+              ["SNR (1 \u03C3 [%])", "%.3f (%.5e)" % (SNR_time_lag, noise_level_lag*100)], ["Delay (residual) [sample]", "%+.8f" % yi_time_rate], \
+              ["Delay (corrected) [sample]", "%+.8f" % delay_correct], ["Rate (residual) [mHz]", "%+.8f" % (yi_time_lag*1000)], ["Rate (corrected) [mHz]", "%+.8f" % (rate_correct*1000)]]
+        table_ax4 = ax4.table(cellText=data, loc="center", cellLoc="left", colWidths=[0.75,0.75])
         table_ax4.set_fontsize(30)
         [table_ax4[i, 1].get_text().set_ha('right') for i in range(len(data))]
         for pos, cell in table_ax4.get_celld().items():
-            cell.set_height(1.0/len(data))
+            cell.set_height(1.0/(len(data)*0.9))
             cell.set_linestyle('')
 
         plt.tight_layout()
@@ -1287,7 +1288,7 @@ if cumulate != 0 and add_plot != True :
     
     # length vs SNR
     param, conv = curve_fit(power_law_equation, cumulate_len, cumulate_snr)
-    x_data  = np.linspace(cumulate_len[0], cumulate_len[-1], int((cumulate_len[-1] - cumulate_len[0])/10))
+    x_data  = np.linspace(cumulate_len[0], cumulate_len[-1], int((cumulate_len[-1] - cumulate_len[0])))
     y_data1 = power_law_equation(x_data, *param)
     y_data2 = power_law_equation(x_data,  param[0], 0.5)
 
