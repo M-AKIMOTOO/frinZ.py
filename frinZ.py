@@ -629,6 +629,8 @@ if   6600 <= observing_frequency <= 7112 :
     observing_band = "c"
 elif 8192 <= observing_frequency <= 8704 :
     observing_band = "x"
+elif 11923 <= observing_frequency <= 12435 :
+    observing_band = "ku"
 else :
     observing_band = ""
 
@@ -821,7 +823,7 @@ for l in range(loop) :
 
     # save-file name
     save_file_name += "%s_%s_%s_%s_%s_len%.0fs" % (station1_name, station2_name, epoch2, label, observing_band, length)
-    if rfi != False:
+    if rfi :
         save_file_name += "_rfi"
     if cumulate != 0 :
         save_file_name += "_cumulate%ds" % cumulate
@@ -998,11 +1000,8 @@ for l in range(loop) :
     # cross-spectrum
     #
     if freq_plot and time_plot :
-
-        if rfi :
-            fringe_time_freq_plot_path += F"rfi/freq_domain/len{length_label}s"
-        else :
-            fringe_time_freq_plot_path += F"/freq_domain/len{length_label}s"
+            
+        fringe_time_freq_plot_path += F"/freq_domain/len{length_label}s"
         os.makedirs(fringe_time_freq_plot_path, exist_ok=True)
 
 
@@ -1101,10 +1100,7 @@ for l in range(loop) :
         #
         # a directory to save a graph
         #
-        if rfi :
-            fringe_time_freq_plot_path += F"rfi/time_domain/len{length_label}s"
-        else :
-            fringe_time_freq_plot_path += F"/time_domain/len{length_label}s"
+        fringe_time_freq_plot_path += F"/time_domain/len{length_label}s"
         os.makedirs(fringe_time_freq_plot_path, exist_ok=True)
 
         fig  = plt.figure(figsize=(10, 7))
