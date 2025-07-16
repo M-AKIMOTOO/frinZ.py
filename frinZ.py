@@ -41,6 +41,7 @@ HISTORY = \
   2024/12/29 update35
   2025/05/10 update36
   2025/05/31 update37
+  2025/07/05 update38
   
   Made by AKIMOTO on 2022/06/10
 ********************** """
@@ -69,6 +70,7 @@ VERSION = \
  version 4.1 (2024/11/30): グラフの描画に RAM が大量に消費されていたので，contour --> imshow に変更した．
  version 4.2 (2024/12/29): JSON フォーマットで res-delay, res-rate, res-acel を指定できるようにした．--delay-corr, --rate-corr, and --acel-corr を使わなくてもよい．
  version 4.3 (2025/05/31): クロスパワースペクトルとフリンジの全てのデータを fits で表示できるようにした．そうすると ds9 で表示することができ，縦断面と横断面を同時に使用することで，png や pdf では発見しづらい混信やスプリアスを発見しやすくする．
+ version 4.4 (2025/07/05): クロスパワースペクトルでフラックス計算が行えるようにクロスパワースペクトルを npz で出力できるようにした．
  +++"""
 
 import os
@@ -82,7 +84,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 import matplotlib
 matplotlib.style.use('fast')
-matplotlib.use("Agg")
+#matplotlib.use("Agg")
 from astropy import units as u
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz
 from astropy.time import Time
@@ -260,7 +262,9 @@ help_dynamic   = "ダイナミックスペクトルとフリンジの時間変�
 help_3D        = "Delay-Rate サーチ平面の３次元プロットを表示する．２パターンの画像が出力され，１つはすべてのサーチ平面をプロットしており，１つは (Delay,Rate) = (0,0) の部分を拡大したサーチ平面をプロットしている．"
 help_add_plot  = "相関振幅，位相，S/N の時間変化をプロットする．"
 help_plane     = "--plot で出力される delay-rate 平面や frequency-rate 平面の拡大図を出力する．--plot と組み合わせて用いる．"
-help_fits      = "--plot と --plane-expansion と同時に使用する．delay-rate 平面や frequency-rate 平面の全体のデータを fits に出力する．ds9 で編集できる．"
+help_fits      = "delay-rate 平面や frequency-rate 平面の全体のデータを fits に出力する．ds9 で編集できる．"
+help_npz       = "Frequency-Rate 平面と Delay-Rate 平面のすべてを npz として出力する．frinZnpzplt.py でグラフを作成する．それを用いることで任意の複素スペクトルやフリンジを確認できる．"
+help_bandpass  = "Bandpass 較正を行う．Bandpass のテンプレートは NRAO530 である．山口 32m 局は 2024/07 に受信機を入れ替えているので，Bndpass が若干変わっている．よって，その前後でテンプレートを用意している．テンプレートは frinZbandpass.npz で python の numpy でしか読み込めないバイナリファイルである．frinZ.py と同じディレクトリに保存する必要がある．--bandpass に引数を与えない場合は frinZbandpass.npz を読み込み，Y or Yes なら --input で Bndpass 較正のテンプレートを npz で作成する．そして，それを指定すると，その Bandpass テンプレートで Bandpass 較正を行う．"
 help_del_win   = "--delay-window delay-range-min delay-range-max．VLBI 観測を実施してターゲットのフラックス密度が検出限界に近いとき，NICT の fringe では天体信号を検出せず，フリンジサーチ内の最大値を取得する可能性が大いにある．VLBI データの解析では，ゲインキャリブレーターで delay と rate を決定してターゲットに適用してやれば，微弱なターゲットのフリンジでも delay と rate 付近に現れる．これを取得するために delay と rate を任意で指定してフリンジサーチの範囲を制限し，その範囲の最大値を取得する．"
 help_rate_win  = "--delay-window の rate 版"
 help_del_corr  = "Delay (sample 単位) を補正する．fringe の出力もしくは frinZ.py を複数回実行して特定した値をそのまま引数にとる．"
@@ -274,6 +278,7 @@ help_history   = "このプログラムの変更履歴を表示する．"
 help_version   = "このプログラムのバージョンを表示する．"
 help_detail    = "このプログラムの使い方の詳細を表示する．"
 help_header    = "cor ファイルのヘッダーを表示する．"
+help_spectrum  = "クロススペクトルを積分時間ごとにまとめた npz を出力する．これで周波数領域で相対較正法を行うことで，6600-7112 & 8192-8704 MHz で総帯域幅 1024 MHz でスペクトルを作成できる．"
 
 parser.add_argument("--input"           , default=True , type=str              , help=help_input   )
 parser.add_argument("--length"          , default=0    , type=int              , help=help_length  )
@@ -282,6 +287,7 @@ parser.add_argument("--loop"            , default=False, type=int              ,
 parser.add_argument("--output"          , action="store_true"                  , help=help_output  )
 parser.add_argument("--plot"            , action="store_true"                  , help=help_plot    )
 parser.add_argument("--frequency"       , action="store_true"                  , help=help_freq    )
+parser.add_argument("--spectrum"        , action="store_true"                  , help=help_spectrum)
 parser.add_argument("--rfi"             , default=False, nargs="*"             , help=help_rfi     )
 parser.add_argument("--delay-window"    , default=False, nargs=2 , dest="del_win", help=help_del_win )
 parser.add_argument("--rate-window"     , default=False, nargs=2 , dest="rate_win", help=help_rate_win)
@@ -289,9 +295,9 @@ parser.add_argument("--delay-correct"   , default=0.0, type=float, dest="del_cor
 parser.add_argument("--rate-correct"    , default=0.0, type=float, dest="rate_corr", help=help_rate_corr)
 parser.add_argument("--acel-correct"    , default=0.0, type=float, dest="acel_corr", help=help_acel_corr)
 parser.add_argument("--delay-rate-acel-json" , default=False, dest="delay_rate_acel_json", help=help_delay_rate_acel_json)
-parser.add_argument("--peak-search"     , default=False, nargs=2   , dest="peak_search", help=help_serach)
+#parser.add_argument("--peak-search"     , default=False, nargs=2   , dest="peak_search", help=help_serach)
 parser.add_argument("--cumulate"        , default=0    , type=int              , help=help_cumulate)
-parser.add_argument("--cpu"             , default=1    , type=int              , help=help_cpu     )
+parser.add_argument("--cpu"             , default=3    , type=int              , help=help_cpu     )
 parser.add_argument("--cmap-time"       , action="store_true", dest="cmap_time", help=help_rate_win)
 parser.add_argument("--cross-output"    , action="store_true", dest="cross"    , help=help_cross   )
 parser.add_argument("--dynamic-spectrum", action="store_true", dest="dynamic"  , help=help_dynamic )
@@ -299,6 +305,8 @@ parser.add_argument("--3D"              , action="store_true", dest="ddd"      ,
 parser.add_argument("--add-plot"        , action="store_true", dest="addplot"  , help=help_add_plot)
 parser.add_argument("--plane-expansion" , action="store_true", dest="plane"    , help=help_plane   )
 parser.add_argument("--fits"            , action="store_true"                  , help=help_fits    )
+parser.add_argument("--npz"             , action="store_true"                  , help=help_npz     )
+parser.add_argument("--bandpass"        , default=[1,1,1], nargs="*"                            , help=help_bandpass)
 parser.add_argument("--history"         , action="store_true"                  , help=help_history )
 parser.add_argument("--version"         , action="store_true"                  , help=help_version )
 parser.add_argument("--detail"          , action="store_true"                  , help=help_detail  )
@@ -312,6 +320,7 @@ loop      = args.loop
 output    = args.output
 time_plot = args.plot
 freq_plot = args.frequency
+spectrum  = args.spectrum
 rfi       = args.rfi
 cpu       = args.cpu
 cumulate  = args.cumulate
@@ -323,12 +332,14 @@ delay_correct = args.del_corr
 rate_correct = args.rate_corr
 acel_correct = args.acel_corr
 delay_rate_acel_json = args.delay_rate_acel_json
-peak_search = args.peak_search
+#peak_search = args.peak_search
 cmap_time = args.cmap_time
 DDD       = args.ddd   # 2D-graph
 ds_plot   = args.dynamic
 plane     = args.plane
 fits      = args.fits
+npz       = args.npz
+bandpass  = args.bandpass
 history   = args.history
 version   = args.version
 detail    = args.detail
@@ -401,17 +412,27 @@ def RFI(r0, bw: int, fft: int) -> int :
         
     return rfi_cut_min, rfi_cut_max, len(r0)
 
-#from numba import jit
-#@jit
-def noise_level(input_2D_data: float, search_00_amp: float) -> float :
+
+def noise_level(input_2D_data: float, search_00_amp: float, flag: str) -> float :
     
-    input_2D_data_real_imag_ave = np.mean(input_2D_data) # 複素数でも実部と虚部でそれぞれで平均を計算できるみたい．
-    noise_level = np.mean(np.absolute(input_2D_data - input_2D_data_real_imag_ave)) # 信号の平均値が直流成分に対応するため，それを除去のために平均値を引いている？．加算平均をとることで雑音レベルを下げることができるらしい．
-    
+    if flag == "frequency" :
+        non_zero_data  = (input_2D_data > 0+0*1j)
+        input_2D_data  = input_2D_data[non_zero_data]
+
+    input_2D_data -= np.mean(input_2D_data) # 複素数でも実部と虚部でそれぞれで平均を計算できるみたい．
+
+    if flag == "time" :
+        noise_level = np.mean(np.absolute(input_2D_data))
+        #noise_level = np.std(np.absolute(input_2D_data)) # 信号の平均値が直流成分に対応するため，それを除去のために平均値を引いている？．加算平均をとることで雑音レベルを下げることができるらしい．
+    if flag == "frequency" :
+        noise_level = np.absolute(input_2D_data)
+        noise_level = noise_level[noise_level<=np.std(noise_level)]
+        noise_level = np.mean(noise_level)
+
     try :
         SNR = search_00_amp / noise_level
     except ZeroDivisionError :
-        SNR, noise_level = 0.0, 0.0
+        SNR, noise_level  = 0.0, 0.0
 
     return SNR, noise_level
 
@@ -632,7 +653,7 @@ elif 8192 <= observing_frequency <= 8704 :
 elif 11923 <= observing_frequency <= 12435 :
     observing_band = "ku"
 else :
-    observing_band = ""
+    observing_band = "N"
 
 
 #
@@ -699,24 +720,25 @@ cor_file.close()
 
 aspect = int(fft_point/2)/PP
 cross_spectrum_directory = save_directory_path + "/raw_visibility"
-os.makedirs(cross_spectrum_directory, exist_ok=True)
-fig, ax = plt.subplots(figsize=(7.5,6))
-plt.imshow(np.angle(complex_visibility, deg=True), extent=[0, fft_point/2, PP, 0],cmap='jet',aspect=aspect) 
-plt.colorbar(label="The phase of the cross-spectrum (deg)")
-plt.xlabel("Channel \n(Obs. Freq: %d MHz, BW: %d MHz)" % (observing_frequency, BW))
-plt.ylabel("PP")
-plt.tight_layout()
-plt.savefig("%s/%s_raw_vis_pp_bw_phase.png" % (cross_spectrum_directory, os.path.basename(ifile).split(".")[0]))
-plt.cla(); plt.close()
+if os.path.isdir(cross_spectrum_directory) == False :
+    os.makedirs(cross_spectrum_directory, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(7.5,6))
+    plt.imshow(np.angle(complex_visibility, deg=True), extent=[0, fft_point/2, PP, 0],cmap='jet',aspect=aspect) 
+    plt.colorbar(label="The phase of the cross-spectrum (deg)")
+    plt.xlabel("Channel \n(Obs. Freq: %d MHz, BW: %d MHz)" % (observing_frequency, BW))
+    plt.ylabel("PP")
+    plt.tight_layout()
+    plt.savefig("%s/%s_raw_vis_pp_bw_phase.png" % (cross_spectrum_directory, os.path.basename(ifile).split(".")[0]))
+    plt.cla(); plt.close()
 
-fig, ax = plt.subplots(figsize=(7.5,6))
-plt.imshow(np.abs(complex_visibility), extent=[0, fft_point/2, PP, 0],cmap='jet',aspect=aspect) 
-plt.colorbar(label="The amplitude of the cross-spectrum")
-plt.xlabel("Channel \n(Obs. Freq: %d MHz, BW: %d MHz)" % (observing_frequency, BW))
-plt.ylabel("PP")
-plt.tight_layout()
-plt.savefig("%s/%s_raw_vis_pp_bw_amp.png" % (cross_spectrum_directory, os.path.basename(ifile).split(".")[0]))
-plt.cla(); plt.close()
+    fig, ax = plt.subplots(figsize=(7.5,6))
+    plt.imshow(np.abs(complex_visibility), extent=[0, fft_point/2, PP, 0],cmap='jet',aspect=aspect) 
+    plt.colorbar(label="The amplitude of the cross-spectrum")
+    plt.xlabel("Channel \n(Obs. Freq: %d MHz, BW: %d MHz)" % (observing_frequency, BW))
+    plt.ylabel("PP")
+    plt.tight_layout()
+    plt.savefig("%s/%s_raw_vis_pp_bw_amp.png" % (cross_spectrum_directory, os.path.basename(ifile).split(".")[0]))
+    plt.cla(); plt.close()
 
 
 #
@@ -734,10 +756,11 @@ if delay_rate_acel_json :
         print("# Not found res-delay and res-rate of %s so they are forced to be 0.0." % ifile)
         print("# Plese use --delay-corr, --rate-corr, and --acel-corr options!")
         delay_correct, rate_correct, acel_correct = 0.0, 0.0, 0.0 
-PP_correct = np.array([np.linspace(skip+1,PP,PP-skip, dtype=int)]).T
-BW_correct = np.linspace(0, int(sampling_speed/2) -1, int(fft_point/2)) *10**6 # MHz
-RF_correct = np.meshgrid(BW_correct, PP_correct.T)[0] + observing_frequency*10**6  # MHz
-complex_visibility *= np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*(PP_correct*effective_integration_length)) #* (1/2 * np.exp(-2*np.pi*1j*acel_correct*(PP_correct*effective_integration_length)**2))
+if delay_correct != 0 or rate_correct != 0 :
+    PP_correct = np.array([np.linspace(skip+1,PP,PP-skip, dtype=int)]).T
+    BW_correct = np.linspace(0, int(sampling_speed/2) -1, int(fft_point/2)) *10**6 # MHz
+    RF_correct = np.meshgrid(BW_correct, PP_correct.T)[0] + observing_frequency*10**6  # MHz
+    complex_visibility *= np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*(PP_correct*effective_integration_length)) #* (1/2 * np.exp(-2*np.pi*1j*acel_correct*(PP_correct*effective_integration_length)**2))
 
 
 
@@ -795,6 +818,15 @@ for l in range(loop) :
     if fits :
         fits_path = save_directory_path + "/fits_freq_delay"
         os.makedirs(fits_path, exist_ok=True)
+    if npz :
+        npz_path = save_directory_path + "/npz_freq_delay"
+        os.makedirs(npz_path, exist_ok=True)
+    if len(bandpass) < 2 :
+        bandpass_path = save_directory_path + "/bandpass"
+        os.makedirs(bandpass_path, exist_ok=True)
+    if spectrum :
+        spectrum_path = save_directory_path + "/spectrum"
+        os.makedirs(spectrum_path, exist_ok=True)
 
          
     save_file_name = ""
@@ -827,19 +859,17 @@ for l in range(loop) :
         save_file_name += "_rfi"
     if cumulate != 0 :
         save_file_name += "_cumulate%ds" % cumulate
+    if len(bandpass) < 2  :
+        save_file_name += "_bandpass"
+    if spectrum :
+        save_file_name += "_spectrum"
+
+
 
     save_file_path = save_directory_path
 
-    #
-    # for caribrating a delay and rate 
-    #
-    #PP_correct = np.array([np.linspace(length*l+1,length*(l+1), length, dtype=int)]).T
-    #BW_correct = np.linspace(0, int(sampling_speed/2) -1, int(fft_point/2)) *10**6 # MHz
-    #RF_correct = np.meshgrid(BW_correct, PP_correct)[0] + observing_frequency*10**6  # MHz
 
-    
-    #complex_visibility_split = complex_visibility[length*l:length*(l+1)] * np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct)* np.array([np.exp(-2*np.pi*1j*rate_correct*RF_correct*PP_correct)]).T 
-    complex_visibility_split = complex_visibility[length*l:length*(l+1)] #* np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*PP_correct) 
+    complex_visibility_split = complex_visibility[length*l:length*(l+1)] 
 
     
     #
@@ -865,12 +895,9 @@ for l in range(loop) :
     # Numpy version
     #freq_rate_2D_array = np.fft.fftshift(np.fft.fft(complex_visibility_split, axis=0, n=integ_fft), axes=0) * fft_point / length
     #lag_rate_2D_array  = np.fft.ifftshift(np.fft.ifft(freq_rate_2D_array, axis=1, n=fft_point), axes=1)
-    
+
     # Scipy version
     freq_rate_2D_array = np.fft.fftshift(scipy.fft.fft(complex_visibility_split, axis=0, n=integ_fft, workers=cpu), axes=0) * fft_point / length
-    lag_rate_2D_array  = np.fft.ifftshift(scipy.fft.ifft(freq_rate_2D_array, axis=1, n=fft_point, workers=cpu), axes=1)
-    lag_rate_2D_array  = lag_rate_2D_array[:, ::-1]        # 列反転，これは delay が０を中心に対称になるため．
-
 
     #
     # the cross-spectrum, the fringe phase, the rate in the frequency domain, the time-lag, and the rate in the time domain.
@@ -888,23 +915,67 @@ for l in range(loop) :
     yi_time_rate = 0.0
     yi_freq_rate = 0.0
 
+    fringe_freq_rate_00_complex_index = np.where(rate_range==yi_freq_rate)[0][0]
+
+    #
+    # Bandpass calibration
+    #
+    bandpass_flag = False
+    bandpass_template_flag = "%s%s%d%s" % (station1_code, station2_code, fft_point, observing_band)
+    if len(bandpass) < 2 :
+        if not bandpass :
+            bandpass_template_npz = np.load("frinZbptable_receiver_old_YI_NRAO530_CX.npz", mmap_mode="r", allow_pickle=True)
+            if bandpass_template_flag in bandpass_template_npz.keys() :
+                pass
+            else :
+                bandpass_template_flag = "%s%s%d%s" % (station2_code, station1_code, fft_point, observing_band)
+            bandpass_template = bandpass_template_npz[bandpass_template_flag]
+            bandpass_template_npz.close()
+            bandpass_flag = True
+        elif bandpass[0] in ["Y", "Yes"] :
+            bandpass_output ={}
+            bandpass_output[bandpass_template_flag] = freq_rate_2D_array[fringe_freq_rate_00_complex_index,:]
+            np.savez_compressed("%s/%s_template.npz" % (bandpass_path, save_file_name), **bandpass_output)
+            print("Make the bandpass template file: %s/%s_template.npz" % (bandpass_path, save_file_name))
+            exit(1)
+        elif os.path.isfile(bandpass[0])  :
+            bandpass_template_npz = np.load(bandpass[0], mmap_mode="r", allow_pickle=True)
+            if bandpass_template_flag in bandpass_template_npz.keys() :
+                pass
+            else :
+                bandpass_template_flag = "%s%s%d%s" % (station2_code, station1_code, fft_point, observing_band)
+            bandpass_template = bandpass_template_npz[bandpass_template_flag]
+            bandpass_template_npz.close()
+            bandpass_flag= True
+    
+    if bandpass_flag :
+        freq_rate_2D_array[:,1:] /= bandpass_template[1:]
+        freq_rate_2D_array[:,1:] *= np.mean(bandpass_template)
+        
+
+    lag_rate_2D_array  = np.fft.ifftshift(scipy.fft.ifft(freq_rate_2D_array, axis=1, n=fft_point, workers=cpu), axes=1)
+    lag_rate_2D_array  = lag_rate_2D_array[:, ::-1]        # 列反転，これは delay が０を中心に対称になるため．
+
+
     #
     # fringe search
     #
     # frequency domain
     if freq_plot == True :
-        fringe_freq_rate_00_complex_index = np.where(rate_range==yi_freq_rate)[0][0]
-        fringe_freq_rate_00_spectrum      = np.absolute(freq_rate_2D_array[fringe_freq_rate_00_complex_index,:])
-        fringe_freq_rate_00_phase1        = np.angle(freq_rate_2D_array[fringe_freq_rate_00_complex_index,:], deg=True)
-        fringe_freq_rate_00_index         = fringe_freq_rate_00_spectrum.argmax()
-        fringe_freq_rate_00_amp           = fringe_freq_rate_00_spectrum[fringe_freq_rate_00_index]
+
+        fringe_freq_rate_00_spectrum      = freq_rate_2D_array[fringe_freq_rate_00_complex_index,:]
+        fringe_freq_rate_00_amplitude1    = np.absolute(fringe_freq_rate_00_spectrum)
+        fringe_freq_rate_00_phase1        = np.angle(fringe_freq_rate_00_spectrum, deg=True)
+        fringe_freq_rate_00_index         = fringe_freq_rate_00_amplitude1.argmax()
+        fringe_freq_rate_00_amp           = fringe_freq_rate_00_amplitude1[fringe_freq_rate_00_index]
         fringe_freq_rate_00_freq          = freq_range[fringe_freq_rate_00_index]
         fringe_freq_rate_00_rate          = np.absolute(freq_rate_2D_array[:,fringe_freq_rate_00_index])
         fringe_freq_rate_00_phase2        = fringe_freq_rate_00_phase1[fringe_freq_rate_00_index]
+
         #
         # noise level, frequency domain
         #
-        SNR_freq_rate, noise_level_freq = noise_level(freq_rate_2D_array, fringe_freq_rate_00_amp)
+        SNR_freq_rate, noise_level_freq = noise_level(freq_rate_2D_array, fringe_freq_rate_00_amp, "frequency")
     
     #
     # time domain
@@ -915,6 +986,7 @@ for l in range(loop) :
     else :                           rate_win_range_low = -4/(length*effective_integration_length)
     if (8/length) < rate_range[-1] : rate_win_range_high = 4/(length*effective_integration_length)
     else :                           rate_win_range_high = rate_range[-1]*effective_integration_length
+
 
     if freq_plot != True :
         
@@ -948,7 +1020,7 @@ for l in range(loop) :
         #
         # noise level, time domain
         #
-        SNR_time_lag, noise_level_lag = noise_level(lag_rate_2D_array, fringe_lag_rate_00_amp)
+        SNR_time_lag, noise_level_lag = noise_level(lag_rate_2D_array, fringe_lag_rate_00_amp, "time")
 
     #
     # fringe output
@@ -957,24 +1029,31 @@ for l in range(loop) :
         if l == 0 :
             ofile_name_freq = F"{save_file_name}_freq.txt"
             output_freq  = F"#******************************************************************************************************************************************************************************************\n"
-            output_freq += F"#      Epoch        Label    Source      Length     Amp       SNR      Phase     Frequency     Noise-level           {station1_name}-azel               {station2_name}-azel                  MJD  \n"
+            output_freq += F"#      Epoch        Label    Source      Length     Amp       SNR      Phase     Frequency     Noise-level           {station1_name}-azel               {station2_name}-azel             MJD        Bandpass\n"
             output_freq += F"#year/doy hh:mm:ss                        [s]       [%]                [deg]       [MHz]       1-sigma [%]   az[deg]  el[deg]  height[m]   az[deg]   el[deg]  height[m]          \n"
             output_freq += F"#******************************************************************************************************************************************************************************************"
             print(output_freq); output_freq += "\n"
-        output1 = "%s    %s    %s     %.5f     %f %7.1f  %+8.3f    %8.3f      %f       %.3f  %.3f  %.3f       %.3f  %.3f  %.3f   %s" % \
-            (epoch1, label, source_name, length*effective_integration_length, fringe_freq_rate_00_amp*100, SNR_freq_rate, fringe_freq_rate_00_phase2, fringe_freq_rate_00_freq, noise_level_freq*100, station1_azel[0], station1_azel[1], station1_azel[2], station2_azel[0], station2_azel[1], station2_azel[2], mjd)
+        output1 = "%s    %s    %s     %.3f     %f %7.1f  %+8.3f    %8.3f      %f       %.3f  %.3f  %.3f       %.3f  %.3f  %.3f   %s   %s" % \
+            (epoch1, label, source_name, length*effective_integration_length, fringe_freq_rate_00_amp*100, SNR_freq_rate, fringe_freq_rate_00_phase2, fringe_freq_rate_00_freq, noise_level_freq*100, \
+             station1_azel[0], station1_azel[1], station1_azel[2], station2_azel[0], station2_azel[1], station2_azel[2], mjd, bandpass_flag)
         output_freq += "%s\n" % output1; print(output1)
+
+        if spectrum :
+            if l == 0 : spectrum_dict = {}; spectrum_ofile = f"{spectrum_path}/{save_file_name}.npz"
+            spectrum_dict[epoch2] = fringe_freq_rate_00_spectrum
+            if l == loop-1 : np.savez_compressed(spectrum_ofile, **spectrum_dict)
 
     if freq_plot != True : # fringe
         if l == 0 :
             ofile_name_time = F"{save_file_name}_time.txt"
-            output_time  = F"#****************************************************************************************************************************************************************************************************\n"
-            output_time += F"#      Epoch         Label     Source      Length      Amp        SNR     Phase     Noise-level      Res-Delay     Res-Rate            {station1_name}-azel               {station2_name}-azel              MJD  \n"
-            output_time += F"#year/doy hh:mm:ss                          [s]        [%]                [deg]     1-sigma[%]       [sample]        [Hz]      az[deg]  el[deg]  height[m]   az[deg]   el[deg]  height[m]          \n"
-            output_time += F"#****************************************************************************************************************************************************************************************************"
+            output_time  = F"#*****************************************************************************************************************************************************************************************************************************\n"
+            output_time += F"#      Epoch         Label     Source      Length      Amp        SNR     Phase     Noise-level      Res-Delay     Res-Rate            {station1_name}-azel               {station2_name}-azel              MJD       Bandpass\n"
+            output_time += F"#year/doy hh:mm:ss                          [s]        [%]                [deg]     1-sigma[%]       [sample]        [Hz]      az[deg]  el[deg]  height[m]   az[deg]   el[deg]  height[m]                                     \n"
+            output_time += F"#*****************************************************************************************************************************************************************************************************************************"
             print(output_time); output_time += "\n"
-        output2 = "%s    %s   %s     %.5f     %.6f  %7.1f  %+8.3f     %f        %+.2f      %+f       %.3f  %.3f  %.3f      %.3f  %.3f  %.3f   %s" % \
-            (epoch1, label, source_name, length*effective_integration_length, fringe_lag_rate_00_amp*100, SNR_time_lag, fringe_lag_rate_00_phase, noise_level_lag*100, yi_time_rate, yi_time_lag, station1_azel[0], station1_azel[1], station1_azel[2], station2_azel[0], station2_azel[1], station2_azel[2], mjd)
+        output2 = "%s    %s   %s     %.3f     %.6f  %7.1f  %+8.3f     %f    %+.2f     %+f     %.3f  %.3f  %.3f      %.3f  %.3f  %.3f   %s   %s" % \
+            (epoch1, label, source_name, length*effective_integration_length, fringe_lag_rate_00_amp*100, SNR_time_lag, fringe_lag_rate_00_phase, noise_level_lag*100, yi_time_rate, yi_time_lag, \
+             station1_azel[0], station1_azel[1], station1_azel[2], station2_azel[0], station2_azel[1], station2_azel[2], mjd, bandpass_flag)
         output_time += "%s\n" % output2; print(output2)
 
         if cumulate != 0 and add_plot != True :
@@ -1004,7 +1083,6 @@ for l in range(loop) :
         fringe_time_freq_plot_path += F"/freq_domain/len{length_label}s"
         os.makedirs(fringe_time_freq_plot_path, exist_ok=True)
 
-
         #
         # make a graph
         #
@@ -1015,7 +1093,7 @@ for l in range(loop) :
         ax1 = fig.add_subplot(gs01[0,0])
         ax2 = fig.add_subplot(gs01[1,0])
         ax1.plot(freq_range, fringe_freq_rate_00_phase1  , lw=1)
-        ax2.plot(freq_range, fringe_freq_rate_00_spectrum, lw=1)
+        ax2.plot(freq_range, fringe_freq_rate_00_amplitude1, lw=1)
         ax2.set_xlabel("Frequency [MHz]")
         ax1.set_ylabel("Phase")
         ax2.set_ylabel("Amplitude")
@@ -1049,19 +1127,23 @@ for l in range(loop) :
         ax4.grid(linestyle=":", color="black")
 
         gs5 = GridSpecFromSubplotSpec(nrows=1, ncols=1, subplot_spec=gs[2,1])
-        ax5 = fig.add_subplot(gs5[0,0])
-        data=[["Epoch", epoch1], ["Station-1", station1_name], ["Station-2", station2_name], \
-              ["Source", source_name], ["Length [s]", "%.6f" % length], ["Frequency [MHz]", "%.6f" % observing_frequency], \
-              ["Peak Amp [%]", "%.6f" % (fringe_freq_rate_00_amp * 100)], ["Peak Phs [deg]", "%.6f" % fringe_freq_rate_00_phase2] \
-              , ["Peak Freq [MHz]", "%.6f" % fringe_freq_rate_00_freq], ["SNR", "%.6f" % SNR_freq_rate], ["1-sigma [%]", "%.8f" % (noise_level_freq*100)]]
-        ax5.axis('tight')
+        ax5 = fig.add_subplot(gs5[0,0]) 
+        ax5.text(-0.25,1.00,"Epoch (UTC)", fontsize=13.5)            ; ax5.text(1.05,1.00, "%s" % epoch1, fontsize=13.5, ha='right')
+        ax5.text(-0.25,0.90,"Station 1 & 2", fontsize=13.5)          ; ax5.text(1.05,0.90, "%s" % (station1_name + " & " + station2_name), fontsize=13.5, ha='right')
+        ax5.text(-0.25,0.80,"Source", fontsize=13.5)                 ; ax5.text(1.05,0.80, "%s" % source_name, fontsize=13.5, ha='right')
+        ax5.text(-0.25,0.70,"Length [s]", fontsize=13.5)             ; ax5.text(1.05,0.70, "%.3f" % length, fontsize=13.5, ha='right')
+        ax5.text(-0.25,0.60,"Frequency [MHz]", fontsize=13.5)        ; ax5.text(1.05,0.60, "%4.3f" % observing_frequency, fontsize=13.5, ha='right')
+        ax5.text(-0.25,0.50,"Peak Amp [%]", fontsize=13.5)           ; ax5.text(1.05,0.50, "%.6f" % (fringe_freq_rate_00_amp * 100), fontsize=13.5, ha='right')
+        ax5.text(-0.25,0.40,"Peak Phs [deg]", fontsize=13.5)         ; ax5.text(1.05,0.40, "%+.5f" % fringe_freq_rate_00_phase2, fontsize=13.5, ha='right')
+        ax5.text(-0.25,0.30,"Peak Freq [MHz]", fontsize=13.5)        ; ax5.text(1.05,0.30, "%+.6f" % fringe_freq_rate_00_freq, fontsize=13.5, ha='right')
+        ax5.text(-0.25,0.20,"SNR (1 \u03C3 [%])", fontsize=13.5)     ; ax5.text(1.05,0.20, "%.3f (%.6f)" % (SNR_freq_rate, noise_level_freq*100), fontsize=13.5, ha='right')
+        if bandpass_flag :
+            bandpass_mean_flag = (fringe_freq_rate_00_amplitude1 > 0+0*1j)
+            bandpass_mean_amp  = np.mean(fringe_freq_rate_00_amplitude1[bandpass_mean_flag])
+            ax5.text(-0.25,0.10,"Mean Amp (BP Calibrated) [%]", fontsize=13.5)  ; ax5.text(1.05,0.10, "%.6f" % (bandpass_mean_amp * 100), fontsize=13.5, ha='right')
+            ax5.text(-0.25,0.00,"Mean Phs (BP Calibrated) [deg]", fontsize=13.5); ax5.text(1.05,0.00, "%+.5f" % (np.mean(fringe_freq_rate_00_phase1[bandpass_mean_flag])), fontsize=13.5, ha='right')
+            ax5.text(-0.25,-0.1,"Mean SNR (BP Calibrated)", fontsize=13.5)      ; ax5.text(1.05,-0.1, "%+.3f" % (bandpass_mean_amp / noise_level_freq), fontsize=13.5, ha='right')
         ax5.axis('off')
-        table_ax5 = ax5.table(cellText=data, loc="center", cellLoc="left", colWidths=[0.73,0.78])
-        table_ax5.set_fontsize(25)
-        [table_ax5[i, 1].get_text().set_ha('right') for i in range(len(data))]
-        for pos, cell in table_ax5.get_celld().items():
-            cell.set_height(1/len(data))
-            cell.set_linestyle('')
 
         plt.tight_layout()
         fig.savefig(F"{fringe_time_freq_plot_path}/{save_file_name}_freq_rate_search.png")
@@ -1071,19 +1153,7 @@ for l in range(loop) :
         if plane :
             dynamic_spectrum(freq_range, rate_range, np.absolute(freq_rate_2D_array), "Frequency [MHz]", "Rate [Hz]", "cross-spectrum [%]", \
                              [min(freq_range), max(freq_range)], [min(rate_range), max(rate_range)], F"{plane_path}/{save_file_name}_freq_rate_plane_expansion.png")
-        if fits :
-            from astropy.io import fits
-            hdu = fits.PrimaryHDU(np.absolute(freq_rate_2D_array))
-            hdr = hdu.header
-            hdr['CRPIX1'] = len(freq_range)               # x 軸の基準ピクセル
-            hdr['CRVAL1'] = freq_range[-1]                # x 軸の基準値
-            hdr['CDELT1'] = freq_range[1] - freq_range[0] # x 軸のピクセルスケール（例：度、mm など）
-            hdr['CTYPE1'] = 'Frequency [MHz]'             # x 軸のタイプ
-            hdr['CRPIX2'] = len(rate_range)               # y 軸の基準ピクセル
-            hdr['CRVAL2'] = rate_range[-1]                # y 軸の基準値
-            hdr['CDELT2'] = rate_range[1] - rate_range[0] # y 軸のピクセルスケール
-            hdr['CTYPE2'] = 'Rate [Hz]'                   # y 軸のタイプ
-            hdu.writeto(f"{fits_path}/{save_file_name}_freq_rate_plane.fits", overwrite=True)
+
 
 
     #
@@ -1148,7 +1218,7 @@ for l in range(loop) :
 
         ax4 = fig.add_subplot(grid[1,1])
  
-        ax4.text(-0.25,1.00,"Epoch (UTC)", fontsize=13.5)                          ; ax4.text(1.05,1.00, "%s" % epoch1, fontsize=13.5, ha='right')
+        ax4.text(-0.25,1.00,"Epoch (UTC)", fontsize=13.5)                    ; ax4.text(1.05,1.00, "%s" % epoch1, fontsize=13.5, ha='right')
         ax4.text(-0.25,0.90,"Station 1 & 2", fontsize=13.5)                  ; ax4.text(1.05,0.90, "%s" % (station1_name + " & " + station2_name), fontsize=13.5, ha='right')
         ax4.text(-0.25,0.80,"Source", fontsize=13.5)                         ; ax4.text(1.05,0.80, "%s" % source_name, fontsize=13.5, ha='right')
         ax4.text(-0.25,0.70,"Length [s]", fontsize=13.5)                     ; ax4.text(1.05,0.70, "%.3f" % length, fontsize=13.5, ha='right')
@@ -1171,19 +1241,53 @@ for l in range(loop) :
             dynamic_spectrum(lag_range , rate_range , np.absolute(lag_rate_2D_array), "Delay [Sample]", "Rate [Hz]", "cross-spectrum [%]", \
                              [min(lag_range), max(lag_range)], [min(rate_range), max(rate_range)], F"{plane_path}/{save_file_name}_delay_rate_plane_expansion.png")
 
-            if fits :
-                from astropy.io import fits
-                hdu = fits.PrimaryHDU(np.absolute(lag_rate_2D_array))
-                hdr = hdu.header
-                hdr['CRPIX1'] = len(lag_range)                # x 軸の基準ピクセル
-                hdr['CRVAL1'] = lag_range[-1]                 # x 軸の基準値
-                hdr['CDELT1'] = lag_range[1] - lag_range[0]   # x 軸のピクセルスケール（例：度、mm など）
-                hdr['CTYPE1'] = "Delay [Sample]"              # x 軸のタイプ
-                hdr['CRPIX2'] = len(rate_range)               # y 軸の基準ピクセル
-                hdr['CRVAL2'] = rate_range[-1]                # y 軸の基準値
-                hdr['CDELT2'] = rate_range[1] - rate_range[0] # y 軸のピクセルスケール
-                hdr['CTYPE2'] = "Rate [Hz]"                   # y 軸のタイプ
-                hdu.writeto(f"{fits_path}/{save_file_name}_delay_rate_plane.fits", overwrite=True)
+    if fits and freq_plot :
+        from astropy.io import fits
+        hdu = fits.PrimaryHDU(np.absolute(lag_rate_2D_array))
+        hdr = hdu.header
+        hdr['CRPIX1'] = len(lag_range)                # x 軸の基準ピクセル
+        hdr['CRVAL1'] = lag_range[-1]                 # x 軸の基準値
+        hdr['CDELT1'] = lag_range[1] - lag_range[0]   # x 軸のピクセルスケール（例：度、mm など）
+        hdr['CTYPE1'] = "Delay [Sample]"              # x 軸のタイプ
+        hdr['CRPIX2'] = len(rate_range)               # y 軸の基準ピクセル
+        hdr['CRVAL2'] = rate_range[-1]                # y 軸の基準値
+        hdr['CDELT2'] = rate_range[1] - rate_range[0] # y 軸のピクセルスケール
+        hdr['CTYPE2'] = "Rate [Hz]"                   # y 軸のタイプ
+        hdu.writeto(f"{fits_path}/{save_file_name}_delay_rate_plane.fits", overwrite=True)
+    
+    if fits :
+        from astropy.io import fits
+        hdu = fits.PrimaryHDU(np.absolute(freq_rate_2D_array))
+        hdr = hdu.header
+        hdr['CRPIX1'] = len(freq_range)               # x 軸の基準ピクセル
+        hdr['CRVAL1'] = freq_range[-1]                # x 軸の基準値
+        hdr['CDELT1'] = freq_range[1] - freq_range[0] # x 軸のピクセルスケール（例：度、mm など）
+        hdr['CTYPE1'] = 'Frequency [MHz]'             # x 軸のタイプ
+        hdr['CRPIX2'] = len(rate_range)               # y 軸の基準ピクセル
+        hdr['CRVAL2'] = rate_range[-1]                # y 軸の基準値
+        hdr['CDELT2'] = rate_range[1] - rate_range[0] # y 軸のピクセルスケール
+        hdr['CTYPE2'] = 'Rate [Hz]'                   # y 軸のタイプ
+        hdu.writeto(f"{fits_path}/{save_file_name}_freq_rate_plane.fits", overwrite=True)
+    
+    #
+    # output freq-rate and delay-rate planes by npz
+    #
+    if npz and freq_plot :
+        np.savez_compressed(f"{npz_path}/{save_file_name}_freq_rate_search.npz", 
+                            flag="frequency",
+                            header=header_region_info,
+                            freq=freq_range, 
+                            rate=rate_range,
+                            spectrum=freq_rate_2D_array, # complex spctrum
+                            )
+    elif npz :
+        np.savez_compressed(f"{npz_path}/{save_file_name}_delay_rate_search.npz", 
+                            flag="time",
+                            header=header_region_info,
+                            lag=lag_range, 
+                            rate=rate_range,
+                            frinZ=lag_rate_2D_array, # complex spctrum
+                            )
 
 
     #
