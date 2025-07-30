@@ -499,8 +499,8 @@ os.makedirs(header_save_path, exist_ok=True)
 cor_header_file = "%s/%s_header.txt" % (header_save_path, os.path.basename(ifile).split(".")[0])
 cor_header_file_exist = os.path.isfile(cor_header_file)
     
-header1 = np.fromfile(ifile, dtype="<i4", count=8).tolist()  # SoftWare Version, Sampling Freq, FFT point, Number of Sector
-header2 = np.fromfile(ifile, dtype="<f8", count=32).tolist() # Station 1&2 XYZ position, Sorce Position, Clock Delay
+header1 = np.fromfile(ifile, dtype="<i4", count=8).tolist()  # Software Version, Sampling Freq, FFT point, Number of Sector
+header2 = np.fromfile(ifile, dtype="<f8", count=32).tolist() # Station 1&2 XYZ position, Source Position, Clock Delay
 header3 = np.fromfile(ifile, dtype="<S8", count=17, offset=32).tolist() # Station Name, Station Code, Source Name
 header_field = ["version", "software", "sampling_speed", "fft", "sector", "frequency", 
                 "station1_posx", "station1_posy", "station1_posz", 
@@ -520,7 +520,7 @@ header_version      = header.version
 software_version    = header.software
 sampling_speed      = header.sampling_speed / 10**6
 
-# FFT point, Number of Sector, observing frequency and parametr period
+# FFT point, Number of Sector, observing frequency and parameter period
 fft_point           = header.fft
 number_of_sector    = header.sector
 observing_frequency = header.frequency/ 10**6
@@ -687,7 +687,7 @@ else :
 
 
 #
-# load corss-spectrum from the inputted cor-file
+# load cross-spectrum from the inputted cor-file
 #
 cor_file = open(ifile, "rb")
 complex_visibility = np.frombuffer(cor_file.read(), dtype="<f4", offset=256)
@@ -718,6 +718,28 @@ obs_scan_time = obs_scan_time[skip:]
 cor_file.close()
 
 
+#
+# corrections of delay and rate
+#
+if delay_correct != 0.0 and rate_correct != 0.0 and delay_rate_acel_json != False :
+    print("Please select --delay-corr and --rate-corr or --delay-rate-json to correct res-delay and res-rate.")
+    exit()
+if delay_rate_acel_json :
+    import json
+    json_load = json.load(open(delay_rate_acel_json, "r"))
+    try :
+        delay_correct, rate_correct, acel_correct = json_load[ifile]
+    except KeyError :
+        print("# Not found res-delay and res-rate of %s so they are forced to be 0.0." % ifile)
+        print("# Plese use --delay-corr, --rate-corr, and --acel-corr options!")
+        delay_correct, rate_correct, acel_correct = 0.0, 0.0, 0.0 
+if delay_correct != 0 or rate_correct != 0 :
+    PP_correct = np.array([np.linspace(skip+1,PP,PP-skip, dtype=int)]).T
+    BW_correct = np.linspace(0, int(sampling_speed/2) -1, int(fft_point/2)) *10**6 # MHz
+    RF_correct = np.meshgrid(BW_correct, PP_correct.T)[0] + observing_frequency*10**6  # MHz
+    complex_visibility *= np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*(PP_correct*effective_integration_length)) #* (1/2 * np.exp(-2*np.pi*1j*acel_correct*(PP_correct*effective_integration_length)**2))
+
+"""
 aspect = int(fft_point/2)/PP
 cross_spectrum_directory = save_directory_path + "/raw_visibility"
 if os.path.isdir(cross_spectrum_directory) == False :
@@ -741,29 +763,6 @@ if os.path.isdir(cross_spectrum_directory) == False :
     plt.cla(); plt.close()
 
 
-#
-# corrections of delay and rate
-#
-if delay_correct != 0.0 and rate_correct != 0.0 and delay_rate_acel_json != False :
-    print("Please select --delay-corr and --rate-corr or --delay-rate-json to correct res-delay and res-rate.")
-    exit()
-if delay_rate_acel_json :
-    import json
-    json_load = json.load(open(delay_rate_acel_json, "r"))
-    try :
-        delay_correct, rate_correct, acel_correct = json_load[ifile]
-    except KeyError :
-        print("# Not found res-delay and res-rate of %s so they are forced to be 0.0." % ifile)
-        print("# Plese use --delay-corr, --rate-corr, and --acel-corr options!")
-        delay_correct, rate_correct, acel_correct = 0.0, 0.0, 0.0 
-if delay_correct != 0 or rate_correct != 0 :
-    PP_correct = np.array([np.linspace(skip+1,PP,PP-skip, dtype=int)]).T
-    BW_correct = np.linspace(0, int(sampling_speed/2) -1, int(fft_point/2)) *10**6 # MHz
-    RF_correct = np.meshgrid(BW_correct, PP_correct.T)[0] + observing_frequency*10**6  # MHz
-    complex_visibility *= np.exp(-2*np.pi*1j*delay_correct/(sampling_speed*10**6)*BW_correct) * np.exp(-2*np.pi*1j*rate_correct*(PP_correct*effective_integration_length)) #* (1/2 * np.exp(-2*np.pi*1j*acel_correct*(PP_correct*effective_integration_length)**2))
-
-
-
 if delay_correct != 0 or rate_correct != 0 :
     fig, ax = plt.subplots(figsize=(7.5,6))
     plt.imshow(np.angle(complex_visibility , deg=True), extent=[0, fft_point/2, PP, 0],cmap='jet',aspect=aspect) 
@@ -782,14 +781,14 @@ if delay_correct != 0 or rate_correct != 0 :
     plt.tight_layout()
     plt.savefig("%s/%s_corrected_vis_pp_bw_amp.png" % (cross_spectrum_directory, os.path.basename(ifile).split(".")[0]))
     plt.cla(); plt.close()
-
+"""
 
 cumulate_len, cumulate_snr, cumulate_noise = [], [], []
 add_plot_length, add_plot_amp, add_plot_snr, add_plot_phase, add_plot_noise_level = [], [], [], [], []
 for l in range(loop) :
 
     #
-    # A directories to summarize an analysed data
+    # A directory to summarise the analysed data
     #
     if time_plot :
         fringe_time_freq_plot_path = save_directory_path + "/fringe_graph"
